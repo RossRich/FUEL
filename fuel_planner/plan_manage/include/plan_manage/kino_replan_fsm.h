@@ -58,6 +58,7 @@ private:
   double no_replan_thresh_, replan_thresh_;
   double waypoints_[50][3];
   int waypoint_num_;
+  std::list<Vector3d> _waypoints_v;
 
   /* planning data */
   bool trigger_, have_target_, have_odom_;
@@ -75,6 +76,7 @@ private:
   ros::Timer exec_timer_, safety_timer_, vis_timer_, test_something_timer_;
   ros::Subscriber waypoint_sub_, odom_sub_;
   ros::Publisher replan_pub_, new_pub_, bspline_pub_;
+  ros::Publisher _wait_goal_pub;
 
   /* helper functions */
   bool callKinodynamicReplan();        // front-end and back-end method
@@ -88,6 +90,8 @@ private:
   void checkCollisionCallback(const ros::TimerEvent& e);
   void waypointCallback(const nav_msgs::PathConstPtr& msg);
   void odometryCallback(const nav_msgs::OdometryConstPtr& msg);
+
+  bool handle_waypoint(Vector3d &);
 
 public:
   KinoReplanFSM(/* args */) {

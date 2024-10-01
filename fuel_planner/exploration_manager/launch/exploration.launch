@@ -1,15 +1,19 @@
 <launch>
   <!-- size of map, change the size in x, y, z according to your application -->
-  <arg name="map_size_x" value="50.0"/>
-  <arg name="map_size_y" value="50.0"/>
-  <arg name="map_size_z" value=" 10.0"/>
+  <arg name="map_size_x" value="25.0"/>
+  <arg name="map_size_y" value="25.0"/>
+  <arg name="map_size_z" value=" 5.0"/>
 
   <arg name="init_x" value="0"/>
   <arg name="init_y" value="0"/>
   <arg name="init_z" value="1.0"/> 
 
+  <remap from="/tf" to="/protium/tf"/>
+  <remap from="/tf_static" to="/protium/tf_static"/>
+  
+
   <!-- topic of your odometry such as VIO or LIO -->
-  <arg name="odom_topic" value="/state_ukf/odom" />
+  <arg name="odom_topic" value="/protium/mavros/odometry/in" />
 
   <!-- main algorithm params -->
   <include file="$(find exploration_manager)/launch/algorithm.xml">
@@ -27,11 +31,11 @@
 
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
     <!-- sensor pose: transform of camera frame in the world frame -->
-    <arg name="sensor_pose_topic" value="/pcl_render_node/sensor_pose"/>
+    <arg name="sensor_pose_topic" value="/protium/sp_pose"/>
     <!-- depth topic: depth image, 640x480 by default -->
     <!-- cloud topic: point cloud measurement  -->
     <!-- subscribe ONLY TO ONE of the two topics -->
-    <arg name="depth_topic" value="/pcl_render_node/depth"/>
+    <arg name="depth_topic" value="/protium/camera/depth/image_raw"/>
     <arg name="cloud_topic" value="/pcl_render_node/cloud"/>
 
     <!-- intrinsic params of the depth camera -->
@@ -41,8 +45,8 @@
     <arg name="fy" value="387.229248046875"/>
 
     <!-- maximum velocity and acceleration the drone will reach -->
-    <arg name="max_vel" value="2.0" />
-    <arg name="max_acc" value="2.0" />
+    <arg name="max_vel" value="0.5" />
+    <arg name="max_acc" value="0.5" />
   </include>
 
   <!-- trajectory server -->
@@ -61,19 +65,18 @@
     <param name="perception_utils/right_angle" value="0.68901" type="double"/>
     <param name="perception_utils/max_dist" value="4.5" type="double"/>
     <param name="perception_utils/vis_dist" value="1.0" type="double"/>
-    
-
   </node>
 
   <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
     <remap from="~odom" to="$(arg odom_topic)"/>        
-    <remap from="~goal" to="/move_base_simple/goal"/>
+    <!-- <remap from="~goal" to="/protium/move_base_simple/goal"/> -->
+    <remap from="~goal" to="/goal"/>
     <remap from="~traj_start_trigger" to="/traj_start_trigger" />
-    <param name="waypoint_type" value="point"/>    
+    <param name="waypoint_type" value="manual-lonely-waypoint"/>    
   </node>
 
   <!-- use simulator -->
-  <include file="$(find exploration_manager)/launch/simulator.xml">
+  <!-- <include file="$(find exploration_manager)/launch/simulator.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
@@ -85,6 +88,6 @@
     <arg name="odometry_topic" value="$(arg odom_topic)" />
     <arg name="c_num" value="0"/>
     <arg name="p_num" value="130"/>
-  </include>
+  </include> -->
 
 </launch>

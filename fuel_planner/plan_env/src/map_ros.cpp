@@ -23,6 +23,8 @@ void MapROS::init() {
   node_.param("map_ros/fy", fy_, -1.0);
   node_.param("map_ros/cx", cx_, -1.0);
   node_.param("map_ros/cy", cy_, -1.0);
+  node_.param("map_ros/frame_width", _frame_width, 640);
+  node_.param("map_ros/frame_height", _frame_height, 480);
   node_.param("map_ros/depth_filter_maxdist", depth_filter_maxdist_, -1.0);
   node_.param("map_ros/depth_filter_mindist", depth_filter_mindist_, -1.0);
   node_.param("map_ros/depth_filter_margin", depth_filter_margin_, -1);
@@ -35,10 +37,11 @@ void MapROS::init() {
   node_.param("map_ros/show_occ_time", show_occ_time_, false);
   node_.param("map_ros/show_esdf_time", show_esdf_time_, false);
   node_.param("map_ros/show_all_map", show_all_map_, false);
+  node_.param("map_ros/enable_vis", _is_enable_vis, false);
   node_.param("map_ros/frame_id", frame_id_, string("world"));
 
-  proj_points_.resize(640 * 480 / (skip_pixel_ * skip_pixel_));
-  point_cloud_.points.resize(640 * 480 / (skip_pixel_ * skip_pixel_));
+  proj_points_.resize(_frame_width * _frame_height / (skip_pixel_ * skip_pixel_));
+  point_cloud_.points.resize(_frame_width * _frame_height / (skip_pixel_ * skip_pixel_));
   // proj_points_.reserve(640 * 480 / map_->mp_->skip_pixel_ / map_->mp_->skip_pixel_);
   proj_points_cnt = 0;
 
@@ -85,6 +88,8 @@ void MapROS::init() {
 }
 
 void MapROS::visCallback(const ros::TimerEvent& e) {
+  if (not _is_enable_vis) return;
+
   publishMapLocal();
   if (show_all_map_) {
     // Limit the frequency of all map
@@ -95,11 +100,11 @@ void MapROS::visCallback(const ros::TimerEvent& e) {
       tpass = 0.0;
     }
   }
-  // publishUnknown();
-  // publishESDF();
+  publishUnknown();
+  publishESDF();
 
-  // publishUpdateRange();
-  // publishDepth();
+  publishUpdateRange();
+  publishDepth();
 }
 
 void MapROS::updateESDFCallback(const ros::TimerEvent& /*event*/) {
@@ -120,6 +125,10 @@ void MapROS::updateESDFCallback(const ros::TimerEvent& /*event*/) {
 
 void MapROS::depthPoseCallback(const sensor_msgs::ImageConstPtr& img,
                                const geometry_msgs::PoseStampedConstPtr& pose) {
+  
+  // std::cout << "Depth_prc: " << (ros::Time::now() - map_start_time_).toSec() << std::endl;
+  // map_start_time_ = ros::Time::now();
+  
   camera_pos_(0) = pose->pose.position.x;
   camera_pos_(1) = pose->pose.position.y;
   camera_pos_(2) = pose->pose.position.z;
@@ -210,11 +219,13 @@ void MapROS::proessDepthImage() {
       pt.z = pt_world[2];
     }
   }
-
-  publishDepth();
+  // publishDepth();
 }
 
 void MapROS::publishMapAll() {
+  if (not map_all_pub_.getNumSubscribers())
+    return;
+  
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud1, cloud2;
   for (int x = map_->mp_->box_min_(0) /* + 1 */; x < map_->mp_->box_max_(0); ++x)
@@ -240,23 +251,26 @@ void MapROS::publishMapAll() {
   map_all_pub_.publish(cloud_msg);
 
   // Output time and known volumn
-  double time_now = (ros::Time::now() - map_start_time_).toSec();
-  double known_volumn = 0;
+  // double time_now = (ros::Time::now() - map_start_time_).toSec();
+  // double known_volumn = 0;
 
-  for (int x = map_->mp_->box_min_(0) /* + 1 */; x < map_->mp_->box_max_(0); ++x)
-    for (int y = map_->mp_->box_min_(1) /* + 1 */; y < map_->mp_->box_max_(1); ++y)
-      for (int z = map_->mp_->box_min_(2) /* + 1 */; z < map_->mp_->box_max_(2); ++z) {
-        if (map_->md_->occupancy_buffer_[map_->toAddress(x, y, z)] > map_->mp_->clamp_min_log_ - 1e-3)
-          known_volumn += 0.1 * 0.1 * 0.1;
-      }
+  // for (int x = map_->mp_->box_min_(0) /* + 1 */; x < map_->mp_->box_max_(0); ++x)
+  //   for (int y = map_->mp_->box_min_(1) /* + 1 */; y < map_->mp_->box_max_(1); ++y)
+  //     for (int z = map_->mp_->box_min_(2) /* + 1 */; z < map_->mp_->box_max_(2); ++z) {
+  //       if (map_->md_->occupancy_buffer_[map_->toAddress(x, y, z)] > map_->mp_->clamp_min_log_ - 1e-3)
+  //         known_volumn += 0.1 * 0.1 * 0.1;
+  //     }
 
-  ofstream file("/home/boboyu/workspaces/plan_ws/src/fast_planner/exploration_manager/resource/"
+  /* ofstream file("/home/boboyu/workspaces/plan_ws/src/fast_planner/exploration_manager/resource/"
                 "curve1.txt",
                 ios::app);
-  file << "time:" << time_now << ",vol:" << known_volumn << std::endl;
+  file << "time:" << time_now << ",vol:" << known_volumn << std::endl; */
 }
 
 void MapROS::publishMapLocal() {
+  if (not map_local_pub_.getNumSubscribers())
+    return;
+
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud;
   pcl::PointCloud<pcl::PointXYZ> cloud2;
@@ -281,21 +295,21 @@ void MapROS::publishMapLocal() {
           pt.z = pos(2);
           cloud.push_back(pt);
         }
-        // else if (map_->md_->occupancy_buffer_inflate_[map_->toAddress(x, y, z)] == 1)
-        // {
-        //   // Inflated occupied cells
-        //   Eigen::Vector3d pos;
-        //   map_->indexToPos(Eigen::Vector3i(x, y, z), pos);
-        //   if (pos(2) > visualization_truncate_height_)
-        //     continue;
-        //   if (pos(2) < visualization_truncate_low_)
-        //     continue;
+        else if (map_->md_->occupancy_buffer_inflate_[map_->toAddress(x, y, z)] == 1)
+        {
+          // Inflated occupied cells
+          Eigen::Vector3d pos;
+          map_->indexToPos(Eigen::Vector3i(x, y, z), pos);
+          if (pos(2) > visualization_truncate_height_)
+            continue;
+          if (pos(2) < visualization_truncate_low_)
+            continue;
 
-        //   pt.x = pos(0);
-        //   pt.y = pos(1);
-        //   pt.z = pos(2);
-        //   cloud2.push_back(pt);
-        // }
+          pt.x = pos(0);
+          pt.y = pos(1);
+          pt.z = pos(2);
+          cloud2.push_back(pt);
+        }
       }
 
   cloud.width = cloud.points.size();
@@ -315,6 +329,9 @@ void MapROS::publishMapLocal() {
 }
 
 void MapROS::publishUnknown() {
+  if (not unknown_pub_.getNumSubscribers())
+    return;
+
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud;
   Eigen::Vector3i min_cut = map_->md_->local_bound_min_;
@@ -346,6 +363,9 @@ void MapROS::publishUnknown() {
 }
 
 void MapROS::publishDepth() {
+  if (not depth_pub_.getNumSubscribers())
+    return;
+  
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud;
   for (int i = 0; i < proj_points_cnt; ++i) {
@@ -361,6 +381,9 @@ void MapROS::publishDepth() {
 }
 
 void MapROS::publishUpdateRange() {
+  if (not update_range_pub_.getNumSubscribers())
+    return;
+
   Eigen::Vector3d esdf_min_pos, esdf_max_pos, cube_pos, cube_scale;
   visualization_msgs::Marker mk;
   map_->indexToPos(map_->md_->local_bound_min_, esdf_min_pos);
@@ -392,6 +415,9 @@ void MapROS::publishUpdateRange() {
 }
 
 void MapROS::publishESDF() {
+  if (not esdf_pub_.getNumSubscribers())
+    return;
+
   double dist;
   pcl::PointCloud<pcl::PointXYZI> cloud;
   pcl::PointXYZI pt;

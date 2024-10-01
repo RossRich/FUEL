@@ -13,6 +13,7 @@ namespace fast_planner {
 // SECTION interfaces for setup and query
 
 FastPlannerManager::FastPlannerManager() {
+
 }
 
 FastPlannerManager::~FastPlannerManager() {
@@ -104,10 +105,16 @@ bool FastPlannerManager::checkTrajCollision(double& distance) {
   while (radius < 6.0 && t_now + fut_t < local_data_.duration_) {
     fut_pt = local_data_.position_traj_.evaluateDeBoorT(t_now + fut_t);
     // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
+  
+    // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
+    // if (dist < 0.5) {
+      // ROS_WARN_STREAM(_label << "Unsafe position: " << fut_pt.transpose() << ", dist: " << dist);
+    // }
+
     if (sdf_map_->getInflateOccupancy(fut_pt) == 1) {
       distance = radius;
       // std::cout << "collision at: " << fut_pt.transpose() << ", dist: " << dist << std::endl;
-      std::cout << "collision at: " << fut_pt.transpose() << std::endl;
+      ROS_WARN_STREAM(_label << "Collision at: " << fut_pt.transpose());
       return false;
     }
     radius = (fut_pt - cur_pt).norm();
@@ -129,7 +136,7 @@ bool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d& start_pt,
             << end_vel.transpose() << endl;
 
   if ((start_pt - end_pt).norm() < 1e-2) {
-    cout << "Close goal" << endl;
+    ROS_WARN("Close goal");
     return false;
   }
 
@@ -144,12 +151,12 @@ bool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d& start_pt,
   kino_path_finder_->reset();
   int status = kino_path_finder_->search(start_pt, start_vel, start_acc, end_pt, end_vel, true);
   if (status == KinodynamicAstar::NO_PATH) {
-    ROS_ERROR("search 1 fail");
+    ROS_ERROR_STREAM(_label << "Search 1 fail");
     // Retry
     kino_path_finder_->reset();
     status = kino_path_finder_->search(start_pt, start_vel, start_acc, end_pt, end_vel, false);
     if (status == KinodynamicAstar::NO_PATH) {
-      cout << "[Kino replan]: Can't find path." << endl;
+      ROS_ERROR_STREAM(_label << "Can't find path.");
       return false;
     }
   }
@@ -189,6 +196,12 @@ bool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d& start_pt,
   std::cout << "State error: (" << (start2[0] - start[0]).norm() << ", "
             << (start2[1] - start[1]).norm() << ", " << (start2[2] - start[2]).norm() << ")"
             << std::endl;
+
+  if ((start2[0] - start[0]).norm() > 1.0)
+    return false;
+
+  if ((end2[0] - end[0]).norm() > 1.0)
+    return false;
 
   double t_opt = (ros::Time::now() - t1).toSec();
   ROS_WARN("Kino t: %lf, opt: %lf", t_search, t_opt);
@@ -330,7 +343,7 @@ bool FastPlannerManager::planGlobalTraj(const Eigen::Vector3d& start_pos) {
 
   // Insert intermediate points if two waypoints are too far
   vector<Eigen::Vector3d> inter_points;
-  const double dist_thresh = 4.0;
+  const double dist_thresh = 1.0;
 
   for (int i = 0; i < points.size() - 1; ++i) {
     inter_points.push_back(points.at(i));
@@ -750,10 +763,18 @@ void FastPlannerManager::planYaw(const Eigen::Vector3d& start_yaw) {
   int cost_func = BsplineOptimizer::SMOOTHNESS | BsplineOptimizer::WAYPOINTS |
                   BsplineOptimizer::START | BsplineOptimizer::END;
 
-  vector<Eigen::Vector3d> start = { Eigen::Vector3d(start_yaw[0], 0, 0),
-    Eigen::Vector3d(start_yaw[1], 0, 0), Eigen::Vector3d(start_yaw[2], 0, 0) };
-  vector<Eigen::Vector3d> end = { Eigen::Vector3d(end_yaw[0], 0, 0),
-    Eigen::Vector3d(end_yaw[1], 0, 0), Eigen::Vector3d(end_yaw[2], 0, 0) };
+  vector<Eigen::Vector3d> start = { 
+    Eigen::Vector3d(start_yaw[0], 0, 0),
+    Eigen::Vector3d(start_yaw[1], 0, 0), 
+    Eigen::Vector3d(start_yaw[2], 0, 0) 
+  };
+  
+  vector<Eigen::Vector3d> end = {
+    Eigen::Vector3d(end_yaw[0], 0, 0),
+    Eigen::Vector3d(end_yaw[1], 0, 0), 
+    Eigen::Vector3d(end_yaw[2], 0, 0)
+  };
+
   bspline_optimizers_[1]->setBoundaryStates(start, end);
   bspline_optimizers_[1]->optimize(yaw, dt_yaw, cost_func, 1, 1);
 

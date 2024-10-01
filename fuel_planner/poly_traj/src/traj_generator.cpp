@@ -48,7 +48,7 @@ void displayPathWithColor(vector<Eigen::Vector3d> path, double resolution, Eigen
     mk.points.push_back(pt);
   }
   traj_pub.publish(mk);
-  ros::Duration(0.001).sleep();
+  // ros::Duration(0.001).sleep();
 }
 
 void drawState(Eigen::Vector3d pos, Eigen::Vector3d vec, int id, Eigen::Vector4d color) {
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
   have_odom = false;
   while (!have_odom && ros::ok()) {
     cout << "no odomeetry." << endl;
-    ros::Duration(0.5).sleep();
+    // ros::Duration(0.5).sleep();
     ros::spinOnce();
   }
 
@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
 
     drawState(pt, vel, 0, Eigen::Vector4d(0, 1, 0, 1));
     drawState(pt, acc, 1, Eigen::Vector4d(0, 0, 1, 1));
-    ros::Duration(0.01).sleep();
+    // ros::Duration(0.01).sleep();
   }
 
   ros::spin();

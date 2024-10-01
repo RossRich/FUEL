@@ -85,7 +85,7 @@ void FastExplorationManager::initialize(ros::NodeHandle& nh) {
   // fout.close();
 }
 
-int FastExplorationManager::planExploreMotion(
+EXPL_RESULT FastExplorationManager::planExploreMotion(
     const Vector3d& pos, const Vector3d& vel, const Vector3d& acc, const Vector3d& yaw) {
   ros::Time t1 = ros::Time::now();
   auto t2 = t1;

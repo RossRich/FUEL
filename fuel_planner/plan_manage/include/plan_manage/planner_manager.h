@@ -60,6 +60,7 @@ private:
 
   unique_ptr<KinodynamicAstar> kino_path_finder_;
   vector<BsplineOptimizer::Ptr> bspline_optimizers_;
+  string _label = "[kino replan] ";
 
   void updateTrajInfo();
 
@@ -98,8 +99,10 @@ private:
 
   // Benchmark method, local exploration
 public:
+  void select_final_goal(const Eigen::Vector3d &start, Eigen::Vector3d &goal);
   bool localExplore(Eigen::Vector3d start_pt, Eigen::Vector3d start_vel, Eigen::Vector3d start_acc,
                     Eigen::Vector3d end_pt);
+  // scan_obst_slice(const Eigen::Vector3d &start, float radius,);
 
   // !SECTION
 };

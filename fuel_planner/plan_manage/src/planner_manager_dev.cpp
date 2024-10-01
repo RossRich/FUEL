@@ -125,6 +125,162 @@ void FastPlannerManager::test() {
   int vid = 0;
 }
 
+/*
+void FastPlannerManager::scan_obst_slice(const Eigen::Vector3d &start float radius) {
+  Eigen::Vector3d pt = start + 0.25;
+  float r = 0;
+  while(r < radius) {
+      for(float alpha = 0.0; alpha < 2 * M_PI; alpha+=0.1){
+        // check if in free space
+        Eigen::Vector3i pt_idx;
+        sdf_map_->posToIndex(pt, pt_idx);
+        if (sdf_map_->getOccupancy(pt_idx) == SDFMap::OCCUPIED && sdf_map_->getDistance(pt_idx) > 0.25) {
+          points.push_back(pt);
+      }
+    }
+        r += 0.25;
+  }
+  
+
+  pcl::PointCloud<pcl::PointXYZ> points_cloud;
+    for (int i = 0; i < points.size(); ++i) {
+      pcl::PointXYZ pt;
+      pt.x = points[i][0];
+      pt.y = points[i][1];
+      pt.z = points[i][2];
+      points_cloud.points.push_back(pt);
+    }
+    points_cloud.width = points_cloud.points.size();
+    points_cloud.height = 1;
+    points_cloud.is_dense = true;
+    points_cloud.header.frame_id = "world";
+    sensor_msgs::PointCloud2 cloud_msg;
+    pcl::toROSMsg(points_cloud, cloud_msg);
+
+}
+*/
+
+void FastPlannerManager::select_final_goal(const Eigen::Vector3d &start, Eigen::Vector3d &goal) {
+  Eigen::Vector3d gi;
+  double dist_to_goal = (goal - start).norm();
+  if (dist_to_goal < 5.0) {
+    gi = goal;
+    std::cout << "Select final gi" << std::endl;
+    return;
+  } else {
+    // sample unifromly within sphere in the unknown free space
+    // Do random number initialization
+    random_device rd;
+    default_random_engine eng = default_random_engine(rd());
+    uniform_real_distribution<double> rand_u(-1.0, 1.0);
+
+    // Get sampled points
+    vector<Eigen::Vector3d> points;  // Sampled points
+    const int sample_num = 16;
+    const double radius1 = 3.5;
+    const double radius2 = 5.0;
+    while (points.size() < sample_num) {
+      Eigen::Vector3d pt;
+      pt[0] = radius2 * rand_u(eng);
+      pt[1] = radius2 * rand_u(eng);
+
+      // inside disc and in forward direction [-45,45]
+      if (pt.head(2).norm() > radius1 && pt.head(2).norm() < radius2 &&
+          atan2(pt[1], pt[0]) < M_PI / 3.0 && atan2(pt[1], pt[0]) > -M_PI / 3.0) {
+        pt += start;
+        pt[2] = 0.5 * rand_u(eng) + 1;
+
+        // check if in free space
+        Eigen::Vector3i pt_idx;
+        sdf_map_->posToIndex(pt, pt_idx);
+        if (sdf_map_->getOccupancy(pt_idx) == SDFMap::FREE && sdf_map_->getDistance(pt_idx) > 0.25) {
+          points.push_back(pt);
+        }
+      }
+    }
+
+    pcl::PointCloud<pcl::PointXYZ> points_cloud;
+    for (int i = 0; i < points.size(); ++i) {
+      pcl::PointXYZ pt;
+      pt.x = points[i][0];
+      pt.y = points[i][1];
+      pt.z = points[i][2];
+      points_cloud.points.push_back(pt);
+    }
+    points_cloud.width = points_cloud.points.size();
+    points_cloud.height = 1;
+    points_cloud.is_dense = true;
+    points_cloud.header.frame_id = "world";
+    sensor_msgs::PointCloud2 cloud_msg;
+    pcl::toROSMsg(points_cloud, cloud_msg);
+
+    std::cout << "Generate sample" << std::endl;
+
+    // Evaluate infomation gain for each point
+    vector<double> gains;  // Gains for sampled points
+
+    // parallel
+    // const int              thread_num = 8;
+    // vector<future<double>> futures(thread_num);
+    // for (int i = 0; i < points.size(); i += thread_num) {
+    //   for (int j = 0; j < thread_num; ++j) {
+    //     Eigen::Vector3d dir = points[thread_num * i + j] - start;
+    //     double          yk  = atan2(dir[1], dir[0]);
+    //     futures[j] = std::async(std::launch::async, &HeadingPlanner::calcInfoGain,
+    //     heading_planner_.get(),
+    //                             points[thread_num * i + j], yk, j);
+    //   }
+    //   for (int j = 0; j < thread_num; ++j) {
+    //     double gain = futures[j].get();
+    //     gains.push_back(gain);
+    //   }
+    // }
+
+    // sequential
+    for (int i = 0; i < points.size(); ++i) {
+      Eigen::Vector3d dir = points[i] - start;
+      double yi = atan2(dir[1], dir[0]);
+      double gain = heading_planner_->calcInfoGain(points[i], yi, 0);
+      gains.push_back(gain);
+    }
+
+    // std::cout << "Calc gain" << std::endl;
+
+    // for (int i = 0; i < points.size(); ++i) {
+    //   std::cout << "pt: " << points[i].transpose() << ", g: " << gains[i] <<
+    //   std::endl;
+    // }
+
+    // Select point with highest score
+    const double dg = (goal - start).norm() + radius1;
+    const double we = 1.0;
+    const double wg = 1000.0;
+    int idx = -1;
+    double max_score = -1;
+    for (int i = 0; i < points.size(); ++i) {
+      double s = we * gains[i] + wg * (dg - (goal - points[i]).norm()) / dg;
+      // std::cout << "score, gain: " << we * gains[i]
+      //           << ", goal: " << wg * (dg - (goal - points[i]).norm()) / dg <<
+      //           std::endl;
+      if (s > max_score) {
+        idx = i;
+        max_score = s;
+      }
+    }
+    gi = points[idx];  // Selected intermediate goal
+    goal = gi;
+    std::cout << "Select intermediate gi: " << gi.transpose() << std::endl;
+
+    points_cloud.clear();
+    points_cloud.points.push_back(pcl::PointXYZ(gi[0], gi[1], gi[2]));
+    points_cloud.width = points_cloud.points.size();
+    points_cloud.height = 1;
+    points_cloud.is_dense = true;
+    points_cloud.header.frame_id = "world";
+    pcl::toROSMsg(points_cloud, cloud_msg);
+  }
+}
+
 bool FastPlannerManager::localExplore(Eigen::Vector3d start, Eigen::Vector3d start_vel,
                                       Eigen::Vector3d start_acc, Eigen::Vector3d goal) {
   local_data_.start_time_ = ros::Time::now();

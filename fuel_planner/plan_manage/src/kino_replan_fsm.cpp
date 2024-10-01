@@ -2,11 +2,12 @@
 #include <plan_manage/kino_replan_fsm.h>
 
 namespace fast_planner {
-void KinoReplanFSM::init(ros::NodeHandle& nh) {
+void KinoReplanFSM::init(ros::NodeHandle &nh) {
   current_wp_ = 0;
   exec_state_ = FSM_EXEC_STATE::INIT;
   have_target_ = false;
   have_odom_ = false;
+  trigger_ = false;
 
   /*  fsm param  */
   nh.param("fsm/flight_type", target_type_, -1);
@@ -18,6 +19,7 @@ void KinoReplanFSM::init(ros::NodeHandle& nh) {
     nh.param("fsm/waypoint" + to_string(i) + "_x", waypoints_[i][0], -1.0);
     nh.param("fsm/waypoint" + to_string(i) + "_y", waypoints_[i][1], -1.0);
     nh.param("fsm/waypoint" + to_string(i) + "_z", waypoints_[i][2], -1.0);
+    _waypoints_v.push_back(std::move(Vector3d(waypoints_[i][0], waypoints_[i][1], waypoints_[i][2])));
   }
 
   /* initialize main modules */
@@ -29,17 +31,18 @@ void KinoReplanFSM::init(ros::NodeHandle& nh) {
   exec_timer_ = nh.createTimer(ros::Duration(0.01), &KinoReplanFSM::execFSMCallback, this);
   safety_timer_ = nh.createTimer(ros::Duration(0.05), &KinoReplanFSM::checkCollisionCallback, this);
 
-  waypoint_sub_ =
-      nh.subscribe("/waypoint_generator/waypoints", 1, &KinoReplanFSM::waypointCallback, this);
+  waypoint_sub_ = nh.subscribe("/waypoint_generator/waypoints", 1, &KinoReplanFSM::waypointCallback, this);
   odom_sub_ = nh.subscribe("/odom_world", 1, &KinoReplanFSM::odometryCallback, this);
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 10);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 10);
   bspline_pub_ = nh.advertise<bspline::Bspline>("/planning/bspline", 10);
+  _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
 }
 
-void KinoReplanFSM::waypointCallback(const nav_msgs::PathConstPtr& msg) {
-  if (msg->poses[0].pose.position.z < -0.1) return;
+void KinoReplanFSM::waypointCallback(const nav_msgs::PathConstPtr &msg) {
+  if (msg->poses[0].pose.position.z < -0.1)
+    return;
 
   cout << "Triggered!" << endl;
   trigger_ = true;
@@ -63,7 +66,7 @@ void KinoReplanFSM::waypointCallback(const nav_msgs::PathConstPtr& msg) {
     changeFSMExecState(REPLAN_TRAJ, "TRIG");
 }
 
-void KinoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr& msg) {
+void KinoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg) {
   odom_pos_(0) = msg->pose.pose.position.x;
   odom_pos_(1) = msg->pose.pose.position.y;
   odom_pos_(2) = msg->pose.pose.position.z;
@@ -81,133 +84,204 @@ void KinoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr& msg) {
 }
 
 void KinoReplanFSM::changeFSMExecState(FSM_EXEC_STATE new_state, string pos_call) {
-  string state_str[5] = { "INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_"
-                                                                                "TRAJ" };
+  string state_str[5] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ",
+                         "EXEC_"
+                         "TRAJ"};
   int pre_s = int(exec_state_);
   exec_state_ = new_state;
-  cout << "[" + pos_call + "]: from " + state_str[pre_s] + " to " + state_str[int(new_state)] << endl;
+  // cout << "[" + pos_call + "]: from " + state_str[pre_s] + " to " + state_str[int(new_state)] << endl;
 }
 
 void KinoReplanFSM::printFSMExecState() {
-  string state_str[5] = { "INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_"
-                                                                                "TRAJ" };
+  string state_str[5] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ",
+                         "EXEC_"
+                         "TRAJ"};
 
   cout << "[FSM]: state: " + state_str[int(exec_state_)] << endl;
 }
 
-void KinoReplanFSM::execFSMCallback(const ros::TimerEvent& e) {
+bool KinoReplanFSM::handle_waypoint(Vector3d &wp) {
+  if (waypoint_num_ == 0 or _waypoints_v.empty()) {
+    have_target_ = false;
+    ROS_WARN_STREAM_THROTTLE(5, "no waypoints");
+    return false;
+  }
+
+  auto &now_pos = odom_pos_;
+  double dist = (_waypoints_v.front() - now_pos).squaredNorm();
+  auto &near_wp = _waypoints_v.front();
+  for (auto i = _waypoints_v.begin(); i != _waypoints_v.end(); i++) {
+    auto tmp_dist = (now_pos - *i).squaredNorm();
+    if (tmp_dist < dist) {
+      near_wp = *i;
+      dist = tmp_dist;
+    }
+  }
+
+  auto env = planner_manager_->edt_environment_;
+  auto dist_to_obst = env->evaluateCoarseEDT(near_wp, -1);
+  ROS_DEBUG_STREAM("to wp dist: " << dist_to_obst);
+  if (dist_to_obst < 0) {
+    ROS_WARN_STREAM("BAD WP: " << near_wp);
+    _waypoints_v.remove(near_wp);
+    return false;
+  } else if (dist_to_obst < 0.3) {
+    _waypoints_v.remove(near_wp);
+    return false;
+  }
+
+  have_target_ = true;
+  wp = near_wp;
+  return true;
+}
+
+void KinoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
   static int fsm_num = 0;
+  static int failed_num = 0;
   fsm_num++;
   if (fsm_num == 100) {
-    printFSMExecState();
-    if (!have_odom_) cout << "no odom." << endl;
-    if (!trigger_) cout << "wait for goal." << endl;
+    // printFSMExecState();
+    if (!have_odom_)
+      cout << "no odom." << endl;
+    if (!trigger_)
+      cout << "wait for goal." << endl;
     fsm_num = 0;
   }
 
   switch (exec_state_) {
-    case INIT: {
-      if (!have_odom_) {
-        return;
-      }
-      if (!trigger_) {
-        return;
-      }
+  case INIT: {
+    if (!have_odom_) {
+      return;
+    }
+    if (!trigger_) {
+      return;
+    }
+    changeFSMExecState(WAIT_TARGET, "FSM");
+    break;
+  }
+
+  case WAIT_TARGET: {
+    if (!have_target_) {
+      
+      if (handle_waypoint(end_pt_))
+        changeFSMExecState(GEN_NEW_TRAJ, "FSM");
+      else
+        _wait_goal_pub.publish(std_msgs::Empty());
+
+      return;
+    } else {
+      changeFSMExecState(GEN_NEW_TRAJ, "FSM");
+    }
+    break;
+  }
+
+  case GEN_NEW_TRAJ: {
+    start_pt_ = odom_pos_;
+    start_vel_ = odom_vel_;
+    start_acc_.setZero();
+
+    if (failed_num > 10) {
+      failed_num = 0;
+      have_target_ = false;
+      changeFSMExecState(WAIT_TARGET, "FAILDE_GEN_TRAG");
+    }
+
+    Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
+    start_yaw_(0) = atan2(rot_x(1), rot_x(0));
+    start_yaw_(1) = start_yaw_(2) = 0.0;
+
+    bool success = callKinodynamicReplan();
+    if (success) {
+      changeFSMExecState(EXEC_TRAJ, "FSM");
+    } else {
+      // have_target_ = false;
+      // changeFSMExecState(WAIT_TARGET, "FSM");
+      failed_num++;
+      changeFSMExecState(GEN_NEW_TRAJ, "FSM");
+    }
+    break;
+  }
+
+  case EXEC_TRAJ: {
+    /* determine if need to replan */
+    LocalTrajData *info = &planner_manager_->local_data_;
+    ros::Time time_now = ros::Time::now();
+    double t_cur = (time_now - info->start_time_).toSec();
+    t_cur = min(info->duration_, t_cur);
+
+    Eigen::Vector3d pos = info->position_traj_.evaluateDeBoorT(t_cur);
+
+    /* && (end_pt_ - pos).norm() < 0.5 */
+    if (t_cur > info->duration_ - 1e-2) {
+      have_target_ = false;
+      _waypoints_v.remove(end_pt_);
       changeFSMExecState(WAIT_TARGET, "FSM");
-      break;
+      return;
+    } else if ((end_pt_ - pos).norm() < no_replan_thresh_) {
+      // cout << "near end" << endl;
+      return;
+    } else if ((info->start_pos_ - pos).norm() < replan_thresh_) {
+      // cout << "near start" << endl;
+      return;
+    } else {
+      // changeFSMExecState(REPLAN_TRAJ, "FSM");
+      return;
     }
+    break;
+  }
 
-    case WAIT_TARGET: {
-      if (!have_target_)
-        return;
-      else {
-        changeFSMExecState(GEN_NEW_TRAJ, "FSM");
-      }
-      break;
-    }
+  case REPLAN_TRAJ: {
+    std_msgs::Empty replan_msg;
+    replan_pub_.publish(replan_msg);
 
-    case GEN_NEW_TRAJ: {
-      start_pt_ = odom_pos_;
-      start_vel_ = odom_vel_;
-      start_acc_.setZero();
+    LocalTrajData *info = &planner_manager_->local_data_;
+    ros::Time time_now = ros::Time::now();
+    double t_cur = (time_now - info->start_time_).toSec();
 
-      Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
-      start_yaw_(0) = atan2(rot_x(1), rot_x(0));
-      start_yaw_(1) = start_yaw_(2) = 0.0;
+    start_pt_ = odom_pos_;
+    start_vel_ = odom_vel_;
+    start_acc_.setZero();
 
-      bool success = callKinodynamicReplan();
-      if (success) {
-        changeFSMExecState(EXEC_TRAJ, "FSM");
-      } else {
-        // have_target_ = false;
-        // changeFSMExecState(WAIT_TARGET, "FSM");
-        changeFSMExecState(GEN_NEW_TRAJ, "FSM");
-      }
-      break;
-    }
+    Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
+    start_yaw_(0) = atan2(rot_x(1), rot_x(0));
+    start_yaw_(1) = start_yaw_(2) = 0.0;
 
-    case EXEC_TRAJ: {
-      /* determine if need to replan */
-      LocalTrajData* info = &planner_manager_->local_data_;
-      ros::Time time_now = ros::Time::now();
-      double t_cur = (time_now - info->start_time_).toSec();
-      t_cur = min(info->duration_, t_cur);
+    // start_pt_ = odom_pos_;
+    // start_pt_ = info->position_traj_.evaluateDeBoorT(t_cur);
+    // start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_cur);
+    // start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_cur);
 
-      Eigen::Vector3d pos = info->position_traj_.evaluateDeBoorT(t_cur);
+    // start_yaw_(0) = info->yaw_traj_.evaluateDeBoorT(t_cur)[0];
+    // start_yaw_(1) = info->yawdot_traj_.evaluateDeBoorT(t_cur)[0];
+    // start_yaw_(2) = info->yawdotdot_traj_.evaluateDeBoorT(t_cur)[0];
 
-      /* && (end_pt_ - pos).norm() < 0.5 */
-      if (t_cur > info->duration_ - 1e-2) {
+    bool success = callKinodynamicReplan();
+    if (success) {
+      changeFSMExecState(EXEC_TRAJ, "FSM");
+      failed_num = 0;
+    } else {
+      if (failed_num > 20) {
+        failed_num = 0;
         have_target_ = false;
-        changeFSMExecState(WAIT_TARGET, "FSM");
-        return;
-      } else if ((end_pt_ - pos).norm() < no_replan_thresh_) {
-        // cout << "near end" << endl;
-        return;
-      } else if ((info->start_pos_ - pos).norm() < replan_thresh_) {
-        // cout << "near start" << endl;
-        return;
+        changeFSMExecState(WAIT_TARGET, "FAILED_RAPLAN");
       } else {
         changeFSMExecState(REPLAN_TRAJ, "FSM");
       }
-      break;
     }
-
-    case REPLAN_TRAJ: {
-      LocalTrajData* info = &planner_manager_->local_data_;
-      ros::Time time_now = ros::Time::now();
-      double t_cur = (time_now - info->start_time_).toSec();
-
-      start_pt_ = info->position_traj_.evaluateDeBoorT(t_cur);
-      start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_cur);
-      start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_cur);
-
-      start_yaw_(0) = info->yaw_traj_.evaluateDeBoorT(t_cur)[0];
-      start_yaw_(1) = info->yawdot_traj_.evaluateDeBoorT(t_cur)[0];
-      start_yaw_(2) = info->yawdotdot_traj_.evaluateDeBoorT(t_cur)[0];
-
-      std_msgs::Empty replan_msg;
-      replan_pub_.publish(replan_msg);
-
-      bool success = callKinodynamicReplan();
-      if (success) {
-        changeFSMExecState(EXEC_TRAJ, "FSM");
-      } else {
-        changeFSMExecState(GEN_NEW_TRAJ, "FSM");
-      }
-      break;
-    }
+    break;
+  }
   }
 }
 
-void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
-  LocalTrajData* info = &planner_manager_->local_data_;
+void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
+  LocalTrajData *info = &planner_manager_->local_data_;
 
   if (have_target_) {
     auto edt_env = planner_manager_->edt_environment_;
 
-    double dist = planner_manager_->pp_.dynamic_ ?
-        edt_env->evaluateCoarseEDT(end_pt_, /* time to program start + */ info->duration_) :
-        edt_env->evaluateCoarseEDT(end_pt_, -1.0);
+    double dist = planner_manager_->pp_.dynamic_
+                      ? edt_env->evaluateCoarseEDT(end_pt_, /* time to program start + */ info->duration_)
+                      : edt_env->evaluateCoarseEDT(end_pt_, -1.0);
 
     if (dist <= 0.3) {
       /* try to find a max distance goal around */
@@ -216,7 +290,7 @@ void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
       double new_x, new_y, new_z, max_dist = -1.0;
       Eigen::Vector3d goal;
 
-      for (double r = dr; r <= 5 * dr + 1e-3; r += dr) {
+      for (double r = dr; r <= 1 * dr + 1e-3; r += dr) {
         for (double theta = -90; theta <= 270; theta += dtheta) {
           for (double nz = 1 * dz; nz >= -1 * dz; nz -= dz) {
             new_x = end_pt_(0) + r * cos(theta / 57.3);
@@ -224,10 +298,9 @@ void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
             new_z = end_pt_(2) + nz;
 
             Eigen::Vector3d new_pt(new_x, new_y, new_z);
-            dist = planner_manager_->pp_.dynamic_ ?
-                edt_env->evaluateCoarseEDT(new_pt,
-                                           /* time to program start+ */ info->duration_) :
-                edt_env->evaluateCoarseEDT(new_pt, -1.0);
+            dist = planner_manager_->pp_.dynamic_ ? edt_env->evaluateCoarseEDT(new_pt,
+                                                                               /* time to program start+ */ info->duration_)
+                                                  : edt_env->evaluateCoarseEDT(new_pt, -1.0);
 
             if (dist > max_dist) {
               /* reset end_pt_ */
@@ -255,11 +328,13 @@ void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
         // have_target_ = false;
         // cout << "Goal near collision, stop." << endl;
         // changeFSMExecState(WAIT_TARGET, "SAFETY");
-        cout << "goal near collision, keep retry" << endl;
-        changeFSMExecState(REPLAN_TRAJ, "FSM");
-
         std_msgs::Empty emt;
         replan_pub_.publish(emt);
+        have_target_ = false;
+
+        cout << "goal near collision, keep retry" << endl;
+
+        changeFSMExecState(WAIT_TARGET, "FSM");
       }
     }
   }
@@ -271,6 +346,7 @@ void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
 
     if (!safe) {
       // cout << "current traj in collision." << endl;
+      // have_target_ = false;
       ROS_WARN("current traj in collision.");
       changeFSMExecState(REPLAN_TRAJ, "SAFETY");
     }
@@ -280,8 +356,7 @@ void KinoReplanFSM::checkCollisionCallback(const ros::TimerEvent& e) {
 bool KinoReplanFSM::callKinodynamicReplan() {
   auto t1 = ros::Time::now();
   ros::Time time_r = ros::Time::now();
-  bool plan_success =
-      planner_manager_->kinodynamicReplan(start_pt_, start_vel_, start_acc_, end_pt_, end_vel_);
+  bool plan_success = planner_manager_->kinodynamicReplan(start_pt_, start_vel_, start_acc_, end_pt_, Vector3d(0, 0, 0));
 
   auto t2 = ros::Time::now();
   if (plan_success) {
@@ -333,8 +408,8 @@ bool KinoReplanFSM::callKinodynamicReplan() {
     auto plan_data = &planner_manager_->plan_data_;
 
     visualization_->drawGeometricPath(plan_data->kino_path_, 0.05, Eigen::Vector4d(1, 0, 1, 1));
-    visualization_->drawBspline(info->position_traj_, 0.08, Eigen::Vector4d(1.0, 1.0, 0.0, 1), true,
-                                0.15, Eigen::Vector4d(1, 0, 0, 1));
+    visualization_->drawBspline(info->position_traj_, 0.08, Eigen::Vector4d(1.0, 1.0, 0.0, 1), true, 0.15,
+                                Eigen::Vector4d(1, 0, 0, 1));
 
     return true;
   } else {
@@ -344,4 +419,4 @@ bool KinoReplanFSM::callKinodynamicReplan() {
 }
 
 // KinoReplanFSM::
-}  // namespace fast_planner
+} // namespace fast_planner

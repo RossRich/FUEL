@@ -102,7 +102,7 @@ void PlanningVisualization::drawBox(const Eigen::Vector3d& center, const Eigen::
   mk.action = visualization_msgs::Marker::ADD;
 
   pubs_[pub_id].publish(mk);
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::drawSpheres(const vector<Eigen::Vector3d>& list, const double& scale,
@@ -120,7 +120,7 @@ void PlanningVisualization::drawSpheres(const vector<Eigen::Vector3d>& list, con
   fillGeometryInfo(mk, list);
   mk.action = visualization_msgs::Marker::ADD;
   pubs_[pub_id].publish(mk);
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::drawCubes(const vector<Eigen::Vector3d>& list, const double& scale,
@@ -138,7 +138,7 @@ void PlanningVisualization::drawCubes(const vector<Eigen::Vector3d>& list, const
   fillGeometryInfo(mk, list);
   mk.action = visualization_msgs::Marker::ADD;
   pubs_[pub_id].publish(mk);
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::drawLines(const vector<Eigen::Vector3d>& list1,
@@ -159,7 +159,7 @@ void PlanningVisualization::drawLines(const vector<Eigen::Vector3d>& list1,
   fillGeometryInfo(mk, list1, list2);
   mk.action = visualization_msgs::Marker::ADD;
   pubs_[pub_id].publish(mk);
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::drawLines(const vector<Eigen::Vector3d>& list, const double& scale,
@@ -186,7 +186,7 @@ void PlanningVisualization::drawLines(const vector<Eigen::Vector3d>& list, const
   fillGeometryInfo(mk, list1, list2);
   mk.action = visualization_msgs::Marker::ADD;
   pubs_[pub_id].publish(mk);
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::displaySphereList(const vector<Eigen::Vector3d>& list, double resolution,
@@ -222,7 +222,7 @@ void PlanningVisualization::displaySphereList(const vector<Eigen::Vector3d>& lis
     mk.points.push_back(pt);
   }
   pubs_[pub_id].publish(mk);
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::displayCubeList(const vector<Eigen::Vector3d>& list, double resolution,
@@ -259,7 +259,7 @@ void PlanningVisualization::displayCubeList(const vector<Eigen::Vector3d>& list,
   }
   pubs_[pub_id].publish(mk);
 
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::displayLineList(const vector<Eigen::Vector3d>& list1,
@@ -299,7 +299,7 @@ void PlanningVisualization::displayLineList(const vector<Eigen::Vector3d>& list1
   }
   pubs_[pub_id].publish(mk);
 
-  ros::Duration(0.0005).sleep();
+  // ros::Duration(0.0005).sleep();
 }
 
 void PlanningVisualization::drawBsplinesPhase1(vector<NonUniformBspline>& bsplines, double size) {

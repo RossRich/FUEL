@@ -1,9 +1,10 @@
 #ifndef SAMPLE_WAYPOINTS_H
 #define SAMPLE_WAYPOINTS_H
 
+#include <eigen3/Eigen/Dense>
+#include <nav_msgs/Path.h>
 #include <ros/ros.h>
 #include <tf/tf.h>
-#include <nav_msgs/Path.h>
 
 nav_msgs::Path point() {
   // Circle parameters
@@ -122,6 +123,71 @@ nav_msgs::Path circle() {
   waypoints.poses.push_back(pt);
 
   // Return
+  return waypoints;
+}
+
+/*
+ * cоздает регулярную сетку точек в заданной области
+ * @note цент в середине заданной области
+ * @param offset: отступ от краев огранич области
+ * @param dist: расстояние между точками
+ */
+nav_msgs::Path dense(float src_size_x, float src_size_y, float offset, float dist, float rotation = 0.0) {
+  float radians = rotation * M_PIf32 / 180.0f;
+  float max_size = std::max(src_size_x, src_size_y);
+
+  float origin_x = -max_size / 2.f;
+  float origin_y = -max_size / 2.f;
+
+  float size_x = max_size - offset * 2;
+  float size_y = max_size - offset * 2;
+
+  float reso = dist;
+
+  Eigen::Vector3f trs(origin_x, origin_y, 0);
+  auto rot_mat = Eigen::AngleAxisf(radians, Eigen::Vector3f(0, 0, 1)).matrix();
+
+  nav_msgs::Path waypoints;
+  geometry_msgs::PoseStamped pt;
+  Eigen::Vector3f point_on_new_origin;
+  pt.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
+  std::vector<geometry_msgs::PoseStamped> tmp_line;
+
+  uint x_points_num = roundf(size_x / reso) + 1;
+  uint y_points_num = roundf(size_y / reso) + 1;
+  float new_x = 0.f;
+  float new_y = 0.f;
+  bool dir = true;
+
+  auto constraint = [=](float p, float max, float min) { return p > max ? max - offset : p < min ? min + offset : p; };
+
+  for (size_t xx = 0; xx < x_points_num; xx++) {
+    tmp_line.clear();
+    for (size_t yy = 0; yy < y_points_num; yy++) {
+      //< новые точки
+      new_x = xx * reso + offset;
+      new_y = yy * reso + offset;
+
+      //< двигаем точку в новое начало координат
+      point_on_new_origin = Eigen::Vector3f(new_x, new_y, 1) + trs;
+      point_on_new_origin = rot_mat * point_on_new_origin;
+
+      if (constraint(point_on_new_origin.x(), src_size_x / 2.0, -src_size_x / 2.0) != point_on_new_origin.x()) continue;
+      if (constraint(point_on_new_origin.y(), src_size_y / 2.0, -src_size_y / 2.0) != point_on_new_origin.y()) continue;
+
+      pt.pose.position.x = point_on_new_origin.x();
+      pt.pose.position.y = point_on_new_origin.y();
+      pt.pose.position.z = 1;
+
+      tmp_line.push_back(pt);
+    }
+    if (dir)
+      waypoints.poses.insert(waypoints.poses.end(), tmp_line.begin(), tmp_line.end());
+    else
+      waypoints.poses.insert(waypoints.poses.end(), tmp_line.rbegin(), tmp_line.rend());
+
+    dir = !dir;
+  }
   return waypoints;
 }
 

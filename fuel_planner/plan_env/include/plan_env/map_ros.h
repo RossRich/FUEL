@@ -66,9 +66,12 @@ private:
 
   ros::Publisher map_local_pub_, map_local_inflate_pub_, esdf_pub_, map_all_pub_, unknown_pub_,
       update_range_pub_, depth_pub_;
-  ros::Timer esdf_timer_, vis_timer_;
+  ros::Timer esdf_timer_;
+  ros::Timer vis_timer_;
 
   // params, depth projection
+  int _frame_width;
+  int _frame_height;
   double cx_, cy_, fx_, fy_;
   double depth_filter_maxdist_, depth_filter_mindist_;
   int depth_filter_margin_;
@@ -80,6 +83,7 @@ private:
   double visualization_truncate_height_, visualization_truncate_low_;
   bool show_esdf_time_, show_occ_time_;
   bool show_all_map_;
+  bool _is_enable_vis;
 
   // data
   // flags of map state

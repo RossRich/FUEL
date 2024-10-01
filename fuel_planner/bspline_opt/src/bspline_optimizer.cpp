@@ -75,7 +75,7 @@ void BsplineOptimizer::setCostFunction(const int& cost_code) {
   if (cost_function_ & VIEWCONS) cost_str += " view  |";
   if (cost_function_ & MINTIME) cost_str += " time  |";
 
-  // ROS_INFO_STREAM("cost func: " << cost_str);
+  ROS_INFO_STREAM("cost func: " << cost_str);
 }
 
 void BsplineOptimizer::setGuidePath(const vector<Eigen::Vector3d>& guide_pt) {

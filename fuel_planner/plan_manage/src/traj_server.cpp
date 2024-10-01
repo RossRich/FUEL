@@ -1,21 +1,21 @@
+#include "bspline/Bspline.h"
 #include "bspline/non_uniform_bspline.h"
 #include "nav_msgs/Odometry.h"
-#include "bspline/Bspline.h"
 #include "quadrotor_msgs/PositionCommand.h"
 #include "std_msgs/Empty.h"
 #include "visualization_msgs/Marker.h"
-#include <ros/ros.h>
-#include <poly_traj/polynomial_traj.h>
 #include <active_perception/perception_utils.h>
+#include <poly_traj/polynomial_traj.h>
+#include <ros/ros.h>
 
 #include <plan_manage/backward.hpp>
 namespace backward {
 backward::SignalHandling sh;
 }
 using fast_planner::NonUniformBspline;
+using fast_planner::PerceptionUtils;
 using fast_planner::Polynomial;
 using fast_planner::PolynomialTraj;
-using fast_planner::PerceptionUtils;
 
 ros::Publisher cmd_vis_pub, pos_cmd_pub, traj_pub;
 nav_msgs::Odometry odom;
@@ -46,8 +46,9 @@ Eigen::Matrix3d R_loop;
 Eigen::Vector3d T_loop;
 bool isLoopCorrection = false;
 
-double calcPathLength(const vector<Eigen::Vector3d>& path) {
-  if (path.empty()) return 0;
+double calcPathLength(const vector<Eigen::Vector3d> &path) {
+  if (path.empty())
+    return 0;
   double len = 0.0;
   for (int i = 0; i < path.size() - 1; ++i) {
     len += (path[i + 1] - path[i]).norm();
@@ -55,8 +56,7 @@ double calcPathLength(const vector<Eigen::Vector3d>& path) {
   return len;
 }
 
-void displayTrajWithColor(vector<Eigen::Vector3d> path, double resolution, Eigen::Vector4d color,
-                          int id) {
+void displayTrajWithColor(vector<Eigen::Vector3d> path, double resolution, Eigen::Vector4d color, int id) {
   visualization_msgs::Marker mk;
   mk.header.frame_id = "world";
   mk.header.stamp = ros::Time::now();
@@ -85,10 +85,12 @@ void displayTrajWithColor(vector<Eigen::Vector3d> path, double resolution, Eigen
     mk.points.push_back(pt);
   }
   traj_pub.publish(mk);
-  ros::Duration(0.001).sleep();
+  // ros::Duration(0.001).sleep();
 }
 
-void drawFOV(const vector<Eigen::Vector3d>& list1, const vector<Eigen::Vector3d>& list2) {
+void drawFOV(const vector<Eigen::Vector3d> &list1, const vector<Eigen::Vector3d> &list2) {
+  if (not cmd_vis_pub.getNumSubscribers()) return;
+
   visualization_msgs::Marker mk;
   mk.header.frame_id = "world";
   mk.header.stamp = ros::Time::now();
@@ -111,7 +113,8 @@ void drawFOV(const vector<Eigen::Vector3d>& list1, const vector<Eigen::Vector3d>
   mk.action = visualization_msgs::Marker::DELETE;
   cmd_vis_pub.publish(mk);
 
-  if (list1.size() == 0) return;
+  if (list1.size() == 0)
+    return;
 
   // Pub new marker
   geometry_msgs::Point pt;
@@ -130,8 +133,7 @@ void drawFOV(const vector<Eigen::Vector3d>& list1, const vector<Eigen::Vector3d>
   cmd_vis_pub.publish(mk);
 }
 
-void drawCmd(const Eigen::Vector3d& pos, const Eigen::Vector3d& vec, const int& id,
-             const Eigen::Vector4d& color) {
+void drawCmd(const Eigen::Vector3d &pos, const Eigen::Vector3d &vec, const int &id, const Eigen::Vector4d &color) {
   visualization_msgs::Marker mk_state;
   mk_state.header.frame_id = "world";
   mk_state.header.stamp = ros::Time::now();
@@ -177,19 +179,22 @@ void newCallback(std_msgs::Empty msg) {
   traj_real_.clear();
 }
 
-void odomCallbck(const nav_msgs::Odometry& msg) {
-  if (msg.child_frame_id == "X" || msg.child_frame_id == "O") return;
+void odomCallbck(const nav_msgs::Odometry &msg) {
+  if (msg.child_frame_id == "X" || msg.child_frame_id == "O")
+    return;
   odom = msg;
-  traj_real_.push_back(
-      Eigen::Vector3d(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z));
+  traj_real_.push_back(Eigen::Vector3d(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z));
 
-  if (traj_real_.size() > 10000) traj_real_.erase(traj_real_.begin(), traj_real_.begin() + 1000);
+  if (traj_real_.size() > 1000) {
+    // traj_real_.erase(traj_real_.begin(), traj_real_.begin() + 5000);
+    traj_real_.insert(traj_real_.begin(), traj_real_.begin() + 500, traj_real_.end());
+    traj_real_.erase(traj_real_.begin() + 500, traj_real_.end());
+  }
 }
 
 void pgTVioCallback(geometry_msgs::Pose msg) {
   // World to odom
-  Eigen::Quaterniond q =
-      Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
+  Eigen::Quaterniond q = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
   R_loop = q.toRotationMatrix();
   T_loop << msg.position.x, msg.position.y, msg.position.z;
 
@@ -197,18 +202,15 @@ void pgTVioCallback(geometry_msgs::Pose msg) {
   // cout << "T_loop: " << T_loop << endl;
 }
 
-void visCallback(const ros::TimerEvent& e) {
+void visCallback(const ros::TimerEvent &e) {
   // Draw the executed traj (desired state)
   // displayTrajWithColor(traj_cmd_, 0.05, Eigen::Vector4d(1, 0, 0, 1), pub_traj_id_);
   // displayTrajWithColor(traj_cmd_, 0.05, Eigen::Vector4d(0, 1, 0, 1), pub_traj_id_);
   displayTrajWithColor(traj_cmd_, 0.05, Eigen::Vector4d(0, 0, 1, 1), pub_traj_id_);
-
-  // displayTrajWithColor(traj_real_, 0.03, Eigen::Vector4d(0.925, 0.054, 0.964,
-  // 1),
-  //                      1);
+  displayTrajWithColor(traj_real_, 0.03, Eigen::Vector4d(0.925, 0.054, 0.964, 1), 1);
 }
 
-void bsplineCallback(const bspline::BsplineConstPtr& msg) {
+void bsplineCallback(const bspline::BsplineConstPtr &msg) {
   // Received traj should have ascending traj_id
   if (msg->traj_id <= traj_id_) {
     ROS_ERROR("out of order bspline.");
@@ -254,14 +256,17 @@ void bsplineCallback(const bspline::BsplineConstPtr& msg) {
   }
 }
 
-void cmdCallback(const ros::TimerEvent& e) {
+void cmdCallback(const ros::TimerEvent &e) {
   // No publishing before receive traj data
-  if (!receive_traj_) return;
+  if (!receive_traj_)
+    return;
 
   ros::Time time_now = ros::Time::now();
   double t_cur = (time_now - start_time_).toSec();
   Eigen::Vector3d pos, vel, acc, jer;
   double yaw, yawdot;
+
+  // std::cout << "t_cur: " << t_cur << " traj_duration_: " << traj_duration_ << std::endl;
 
   if (t_cur < traj_duration_ && t_cur >= 0.0) {
     // Current time within range of planned traj
@@ -283,9 +288,11 @@ void cmdCallback(const ros::TimerEvent& e) {
     // Report info of the whole flight
     double len = calcPathLength(traj_cmd_);
     double flight_t = (end_time - start_time).toSec();
-    ROS_WARN_THROTTLE(2, "flight time: %lf, path length: %lf, mean vel: %lf, energy is: % lf ", flight_t,
-                      len, len / flight_t, energy);
+    ROS_WARN_THROTTLE(2, "flight time: %lf, path length: %lf, mean vel: %lf, energy is: % lf ", flight_t, len, len / flight_t,
+                      energy);
+    receive_traj_ = false;
   } else {
+    receive_traj_ = false;
     cout << "[Traj server]: invalid time." << endl;
   }
 
@@ -329,7 +336,7 @@ void cmdCallback(const ros::TimerEvent& e) {
   if (traj_cmd_.size() == 0) {
     // Add the first position
     traj_cmd_.push_back(pos);
-  } else if ((pos - traj_cmd_.back()).norm() > 1e-6) {
+  } else if ((pos - traj_cmd_.back()).norm() > 1e-2) {
     // Add new different commanded position
     traj_cmd_.push_back(pos);
     double dt = (time_now - last_time).toSec();
@@ -338,8 +345,11 @@ void cmdCallback(const ros::TimerEvent& e) {
   }
   last_time = time_now;
 
-  // if (traj_cmd_.size() > 100000)
-  //   traj_cmd_.erase(traj_cmd_.begin(), traj_cmd_.begin() + 1000);
+  if (traj_cmd_.size() > 10000) {
+    // traj_cmd_.erase(traj_cmd_.begin(), traj_cmd_.begin() + 25000);
+    traj_cmd_.insert(traj_cmd_.begin(), traj_cmd_.begin() + 5000, traj_cmd_.end());
+    traj_cmd_.erase(traj_cmd_.begin() + 5000, traj_cmd_.end());
+  }
 }
 
 void test() {
@@ -433,7 +443,7 @@ void test() {
   }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   ros::init(argc, argv, "traj_server");
   ros::NodeHandle node;
   ros::NodeHandle nh("~");
@@ -464,8 +474,8 @@ int main(int argc, char** argv) {
   ros::Duration(1.0).sleep();
 
   // Control parameter
-  cmd.kx = { 5.7, 5.7, 6.2 };
-  cmd.kv = { 3.4, 3.4, 4.0 };
+  cmd.kx = {5.7, 5.7, 6.2};
+  cmd.kv = {3.4, 3.4, 4.0};
 
   std::cout << start_time.toSec() << std::endl;
   std::cout << end_time.toSec() << std::endl;
@@ -490,16 +500,16 @@ int main(int argc, char** argv) {
 
   // test();
   // Initialization for exploration, move upward and downward
-  for (int i = 0; i < 100; ++i) {
-    cmd.position.z += 0.01;
-    pos_cmd_pub.publish(cmd);
-    ros::Duration(0.01).sleep();
-  }
-  for (int i = 0; i < 100; ++i) {
-    cmd.position.z -= 0.01;
-    pos_cmd_pub.publish(cmd);
-    ros::Duration(0.01).sleep();
-  }
+  // for (int i = 0; i < 100; ++i) {
+  //   cmd.position.z += 0.01;
+  //   pos_cmd_pub.publish(cmd);
+  //   ros::Duration(0.01).sleep();
+  // }
+  // for (int i = 0; i < 100; ++i) {
+  //   cmd.position.z -= 0.01;
+  //   pos_cmd_pub.publish(cmd);
+  //   ros::Duration(0.01).sleep();
+  // }
   // ros::Duration(1.0).sleep();
   // for (int i = 0; i < 100; ++i)
   // {

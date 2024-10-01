@@ -60,7 +60,7 @@ void displayTrajWithColor(vector<Eigen::Vector3d> traj, double resolution, Eigen
     mk.points.push_back(pt);
   }
   traj_pub.publish(mk);
-  ros::Duration(0.001).sleep();
+  // ros::Duration(0.001).sleep();
 }
 
 void drawCmd(const Eigen::Vector3d& pos, const Eigen::Vector3d& vec, const int& id,

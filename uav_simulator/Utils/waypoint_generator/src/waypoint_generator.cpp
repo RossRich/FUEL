@@ -1,16 +1,16 @@
-#include <iostream>
-#include <ros/ros.h>
-#include <nav_msgs/Odometry.h>
-#include <geometry_msgs/PoseStamped.h>
+#include "sample_waypoints.h"
+#include <boost/format.hpp>
+#include <deque>
+#include <eigen3/Eigen/Dense>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Vector3.h>
+#include <iostream>
+#include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
-#include "sample_waypoints.h"
+#include <ros/ros.h>
 #include <vector>
-#include <deque>
-#include <boost/format.hpp>
-#include <eigen3/Eigen/Dense>
 
 using namespace std;
 using bfmt = boost::format;
@@ -23,11 +23,14 @@ bool is_odom_ready;
 nav_msgs::Odometry odom;
 nav_msgs::Path waypoints;
 
+float rot = 0.f;
+float step = 45.f;
+
 // series waypoint needed
 std::deque<nav_msgs::Path> waypointSegments;
 ros::Time trigged_time;
 
-void load_seg(ros::NodeHandle& nh, int segid, const ros::Time& time_base) {
+void load_seg(ros::NodeHandle &nh, int segid, const ros::Time &time_base) {
   std::string seg_str = boost::str(bfmt("seg%d/") % segid);
   double yaw;
   double time_from_start;
@@ -70,7 +73,7 @@ void load_seg(ros::NodeHandle& nh, int segid, const ros::Time& time_base) {
   waypointSegments.push_back(path_msg);
 }
 
-void load_waypoints(ros::NodeHandle& nh, const ros::Time& time_base) {
+void load_waypoints(ros::NodeHandle &nh, const ros::Time &time_base) {
   int seg_cnt = 0;
   waypointSegments.clear();
   ROS_ASSERT(nh.getParam("segment_cnt", seg_cnt));
@@ -115,7 +118,7 @@ void publish_waypoints_vis() {
   pub2.publish(poseArray);
 }
 
-void odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
+void odom_callback(const nav_msgs::Odometry::ConstPtr &msg) {
   is_odom_ready = true;
   odom = *msg;
 
@@ -126,11 +129,10 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
 
       std::stringstream ss;
       ss << bfmt("Series send %.3f from start:\n") % trigged_time.toSec();
-      for (auto& pose_stamped : waypoints.poses) {
-        ss << bfmt("P[%.2f, %.2f, %.2f] q(%.2f,%.2f,%.2f,%.2f)") % pose_stamped.pose.position.x %
-                pose_stamped.pose.position.y % pose_stamped.pose.position.z %
-                pose_stamped.pose.orientation.w % pose_stamped.pose.orientation.x %
-                pose_stamped.pose.orientation.y % pose_stamped.pose.orientation.z
+      for (auto &pose_stamped : waypoints.poses) {
+        ss << bfmt("P[%.2f, %.2f, %.2f] q(%.2f,%.2f,%.2f,%.2f)") % pose_stamped.pose.position.x % pose_stamped.pose.position.y %
+                  pose_stamped.pose.position.z % pose_stamped.pose.orientation.w % pose_stamped.pose.orientation.x %
+                  pose_stamped.pose.orientation.y % pose_stamped.pose.orientation.z
            << std::endl;
       }
       ROS_INFO_STREAM(ss.str());
@@ -143,13 +145,13 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
   }
 }
 
-void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+void goal_callback(const geometry_msgs::PoseStamped::ConstPtr &msg) {
   /*    if (!is_odom_ready) {
           ROS_ERROR("[waypoint_generator] No odom!");
           return;
       }*/
 
-  trigged_time = ros::Time::now();  // odom.header.stamp;
+  trigged_time = ros::Time::now(); // odom.header.stamp;
   // ROS_ASSERT(trigged_time > ros::Time(0));
 
   ros::NodeHandle n("~");
@@ -206,7 +208,7 @@ void goal_callback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
   }
 }
 
-void traj_start_trigger_callback(const geometry_msgs::PoseStamped& msg) {
+void traj_start_trigger_callback(const geometry_msgs::PoseStamped &msg) {
   if (!is_odom_ready) {
     ROS_ERROR("[waypoint_generator] No odom!");
     return;
@@ -220,7 +222,31 @@ void traj_start_trigger_callback(const geometry_msgs::PoseStamped& msg) {
   n.param("waypoint_type", waypoint_type, string("manual"));
 
   ROS_ERROR_STREAM("Pattern " << waypoint_type << " generated!");
-  if (waypoint_type == string("free")) {
+  if (waypoint_type == string("dense")) {
+
+    float size_x = 5.f;
+    float size_y = 5.f;
+    float offset = 0.25f;
+    float dist = 0.5f;
+    float rotation = rot > 360 ? 360 : rot < -360 ? -360 : rot;
+
+    if (rot > 360 or rot < -360)
+      step = -step;
+
+    rot += step;
+
+    std::cout << "rot: " << rot << std::endl;
+
+    n.param("point_dist", dist, 0.5f);
+    n.param("size_x", size_x, 5.f);
+    n.param("size_y", size_y, 5.f);
+    n.param("offset", offset, 0.25f);
+
+    waypoints = dense(size_x, size_y, offset, dist, rotation);
+
+    publish_waypoints();
+    publish_waypoints_vis();
+  } else if (waypoint_type == string("free")) {
     waypoints = point();
     publish_waypoints_vis();
     publish_waypoints();
@@ -241,7 +267,7 @@ void traj_start_trigger_callback(const geometry_msgs::PoseStamped& msg) {
   }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   ros::init(argc, argv, "waypoint_generator");
   ros::NodeHandle n("~");
   n.param("waypoint_type", waypoint_type, string("manual"));

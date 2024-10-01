@@ -4,9 +4,12 @@ project(exploration_manager)
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")
+set(NLopt_INCLUDE_DIRS ${NLOPT_INCLUDE_DIR})
+set(CMAKE_CXX_STANDARD 14)
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.7 REQUIRED)
+find_package(NLopt REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -27,7 +30,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES exploration_manager
- CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils lkh_tsp_solver plan_manage
+ CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils lkh_tsp_solver plan_manage quadrotor_msgs
 #  DEPENDS system_lib
 )
 
@@ -37,6 +40,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/include
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
+  ${NLOPT_INCLUDE_DIR}
 )
 
 
