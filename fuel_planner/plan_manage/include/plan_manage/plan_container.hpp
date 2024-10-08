@@ -2,13 +2,12 @@
 #define _PLAN_CONTAINER_H_
 
 #include <Eigen/Eigen>
-#include <vector>
-#include <ros/ros.h>
-
-#include <bspline/non_uniform_bspline.h>
-#include <poly_traj/polynomial_traj.h>
-#include <path_searching/topo_prm.h>
 #include <active_perception/traj_visibility.h>
+#include <bspline/non_uniform_bspline.h>
+#include <path_searching/topo_prm.h>
+#include <poly_traj/polynomial_traj.h>
+#include <ros/ros.h>
+#include <vector>
 
 using std::vector;
 
@@ -25,17 +24,18 @@ public:
   double time_change_;
   double last_time_inc_;
 
-  GlobalTrajData(/* args */) {
-  }
+  GlobalTrajData(/* args */) {}
 
-  ~GlobalTrajData() {
-  }
+  ~GlobalTrajData() {}
 
-  bool localTrajReachTarget() {
-    return fabs(local_end_time_ - global_duration_) < 1e-3;
-  }
+  /*
+   * Близость конца локальной траектории с глобальной траекторией
+   * @param thresh_param Предел близости конечных точек в единицах времени
+   * @return true - если осталось меньше чем thresh_param (обе точки близки), иначе false
+   */
+  bool localTrajReachTarget(float thresh_param = 1e-3) { return fabs(local_end_time_ - global_duration_) < thresh_param; }
 
-  void setGlobalTraj(const PolynomialTraj& traj, const ros::Time& time) {
+  void setGlobalTraj(const PolynomialTraj &traj, const ros::Time &time) {
     global_traj_ = traj;
     global_duration_ = global_traj_.getTotalTime();
     global_start_time_ = time;
@@ -47,12 +47,11 @@ public:
     last_time_inc_ = 0.0;
   }
 
-  void setLocalTraj(const NonUniformBspline& traj, const double& local_ts, const double& local_te,
-                    const double& time_change) {
+  void setLocalTraj(const NonUniformBspline &traj, const double &local_ts, const double &local_te, const double &time_change) {
     local_traj_.resize(3);
-    local_traj_[0] = traj;
-    local_traj_[1] = local_traj_[0].getDerivative();
-    local_traj_[2] = local_traj_[1].getDerivative();
+    local_traj_[0] = traj;                           //< точки в пространстве
+    local_traj_[1] = local_traj_[0].getDerivative(); //< скорость в точке
+    local_traj_[2] = local_traj_[1].getDerivative(); //< ускорение в точке
 
     local_start_time_ = local_ts;
     local_end_time_ = local_te;
@@ -61,19 +60,24 @@ public:
     last_time_inc_ = time_change;
   }
 
-  Eigen::Vector3d getState(const double& t, const int& k) {
-    if (t >= -1e-3 && t <= local_start_time_)
+  /*
+   * Магическая функция возвращает точку в простанстве по заданной временной метке
+   * @param t Метка времени на траектории
+   * @param k Тип траектории (позиция - 0, скорость - 1, ускорение - 2)
+   * @return Точка на траектории в момент времени t
+   */
+  Eigen::Vector3d getState(const double &t, const int &k) {
+    if (t >= -1e-3 && t <= local_start_time_) //< между началом глоб траект и началом локал траек
       return global_traj_.evaluate(t - time_change_ + last_time_inc_, k);
-    else if (t >= local_end_time_ && t <= global_duration_ + 1e-3)
+    else if (t >= local_end_time_ && t <= global_duration_ + 1e-3) //< между концом локал траек и концом глоб траек
       return global_traj_.evaluate(t - time_change_, k);
     else
-      return local_traj_[k].evaluateDeBoorT(t - local_start_time_);
+      return local_traj_[k].evaluateDeBoorT(t - local_start_time_); //< на локал траек?
   }
 
   // Get data required to parameterize a Bspline within a duration
-  void getTrajInfoInDuration(const double& start_t, const double& duration, const double& dt,
-                             vector<Eigen::Vector3d>& point_set,
-                             vector<Eigen::Vector3d>& start_end_derivative) {
+  void getTrajInfoInDuration(const double &start_t, const double &duration, const double &dt, vector<Eigen::Vector3d> &point_set,
+                             vector<Eigen::Vector3d> &start_end_derivative) {
     for (double tp = 0.0; tp <= duration + 1e-4; tp += dt) {
       auto cur_pt = getState(start_t + tp, 0);
       point_set.push_back(cur_pt);
@@ -84,18 +88,22 @@ public:
     start_end_derivative.push_back(getState(start_t + duration, 2));
   }
 
-  // Get data required to parameterize a Bspline within a sphere
-  void getTrajInfoInSphere(const double& start_t, const double& radius, const double& dist_pt,
-                           vector<Eigen::Vector3d>& point_set,
-                           vector<Eigen::Vector3d>& start_end_derivative, double& dt, double& duration) {
-    double segment_len = 0.0;                         // Length of the truncated segment
-    double segment_time = 0.0;                        // Duration of the truncated segment
-    Eigen::Vector3d first_pt = getState(start_t, 0);  // First point of the segment
+  /*
+   * Get data required to parameterize a Bspline within a sphere
+   * @param start_t Начальное время на глобальной траектории
+   * @param radius Длинна отрезка для параметризации
+   * @param dist_pt Расстояние между контрольными точками (bspline)
+   */
+  void getTrajInfoInSphere(const double &start_t, const double &radius, const double &dist_pt, vector<Eigen::Vector3d> &point_set,
+                           vector<Eigen::Vector3d> &start_end_derivative, double &dt, double &duration) {
+    double segment_len = 0.0;                        // Length of the truncated segment
+    double segment_time = 0.0;                       // Duration of the truncated segment
+    Eigen::Vector3d first_pt = getState(start_t, 0); // First point of the segment
     Eigen::Vector3d prev_pt = first_pt;
     Eigen::Vector3d cur_pt = first_pt;
 
     // Search the time at which distance to current position is larger than a threshold
-    const double delta_t = 0.2;
+    const double delta_t = 0.2; //< расстояние между двумя точками (время)
     while ((cur_pt - first_pt).norm() < radius && start_t + segment_time < global_duration_ - 1e-3) {
       segment_time = min(segment_time + delta_t, global_duration_ - start_t);
       cur_pt = getState(start_t + segment_time, 0);
@@ -114,12 +122,12 @@ public:
 
 struct PlanParameters {
   /* planning algorithm parameters */
-  double max_vel_, max_acc_, max_jerk_;  // physical limits
+  double max_vel_, max_acc_, max_jerk_; // physical limits
   double accept_vel_, accept_acc_;
 
   double max_yawdot_;
-  double local_traj_len_;  // local replanning trajectory length
-  double ctrl_pt_dist;     // distance between adjacient B-spline control points
+  double local_traj_len_; // local replanning trajectory length
+  double ctrl_pt_dist;    // distance between adjacient B-spline control points
   int bspline_degree_;
   bool min_time_;
 
@@ -138,8 +146,7 @@ struct LocalTrajData {
   double duration_;
   ros::Time start_time_;
   Eigen::Vector3d start_pos_;
-  NonUniformBspline position_traj_, velocity_traj_, acceleration_traj_, yaw_traj_, yawdot_traj_,
-      yawdotdot_traj_;
+  NonUniformBspline position_traj_, velocity_traj_, acceleration_traj_, yaw_traj_, yawdot_traj_, yawdotdot_traj_;
 };
 
 // structure of trajectory info
@@ -158,10 +165,9 @@ public:
     traj1_.traj_id_ = 0;
     traj2_.traj_id_ = 0;
   }
-  ~LocalTrajServer() {
-  }
+  ~LocalTrajServer() {}
 
-  void addTraj(const LocalTrajData& traj) {
+  void addTraj(const LocalTrajData &traj) {
     if (traj1_.traj_id_ == 0) {
       // receive the first traj, save in traj1
       traj1_ = traj;
@@ -170,7 +176,7 @@ public:
     }
   }
 
-  bool evaluate(const ros::Time& time, LocalTrajState& traj_state) {
+  bool evaluate(const ros::Time &time, LocalTrajState &traj_state) {
     if (traj1_.traj_id_ == 0) {
       // not receive traj yet
       return false;
@@ -221,10 +227,8 @@ public:
 
 class MidPlanData {
 public:
-  MidPlanData(/* args */) {
-  }
-  ~MidPlanData() {
-  }
+  MidPlanData(/* args */) {}
+  ~MidPlanData() {}
 
   vector<Eigen::Vector3d> global_waypoints_;
 
@@ -268,9 +272,8 @@ public:
     topo_select_paths_.clear();
   }
 
-  void addTopoPaths(list<GraphNode::Ptr>& graph, vector<vector<Eigen::Vector3d>>& paths,
-                    vector<vector<Eigen::Vector3d>>& filtered_paths,
-                    vector<vector<Eigen::Vector3d>>& selected_paths) {
+  void addTopoPaths(list<GraphNode::Ptr> &graph, vector<vector<Eigen::Vector3d>> &paths,
+                    vector<vector<Eigen::Vector3d>> &filtered_paths, vector<vector<Eigen::Vector3d>> &selected_paths) {
     topo_graph_ = graph;
     topo_paths_ = paths;
     topo_filtered_paths_ = filtered_paths;
@@ -278,6 +281,6 @@ public:
   }
 };
 
-}  // namespace fast_planner
+} // namespace fast_planner
 
 #endif

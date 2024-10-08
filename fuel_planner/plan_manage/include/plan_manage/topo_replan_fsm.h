@@ -24,11 +24,11 @@ using std::vector;
 namespace fast_planner {
 class TopoReplanFSM {
 private:
-  const char *_label = "[planner] ";
+  const char *_label = "[topo_fsm] ";
 
   /* ---------- flag ---------- */
-  enum FSM_EXEC_STATE { INIT, WAIT_TARGET, GEN_NEW_TRAJ, REPLAN_TRAJ, EXEC_TRAJ, REPLAN_NEW };
-  enum TARGET_TYPE { MANUAL_TARGET = 1, PRESET_TARGET = 2, REFENCE_PATH = 3 };
+  enum FSM_EXEC_STATE { INIT, WAIT_TARGET, GEN_NEW_TRAJ, REPLAN_TRAJ, EXEC_TRAJ };
+  enum TARGET_TYPE { MANUAL_TARGET = 1, PRESET_TARGET, REFENCE_PATH };
   const std::string state_str[6] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_TRAJ", "REPLAN_NEW"};
   /* planning utils */
   FastPlannerManager::Ptr planner_manager_;
@@ -40,8 +40,7 @@ private:
   double waypoints_[50][3];
   int waypoint_num_;
   bool act_map_;
-
-  std::queue<Eigen::Vector3d> _waypoints_queue;
+  bool _enable_viz;
 
   /* planning data */
   bool trigger_, have_target_, have_odom_, collide_;
@@ -62,7 +61,6 @@ private:
   ros::Publisher _wait_goal_pub;
 
   /* helper functions */
-  bool callSearchAndOptimization();   // front-end and back-end method
   bool callTopologicalTraj(int step); // topo path guided gradient-based
                                       // optimization; 1: new, 2: replan
   void changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call);
@@ -73,6 +71,9 @@ private:
   void frontierCallback(const ros::TimerEvent &e);
   void waypointCallback(const nav_msgs::PathConstPtr &msg);
   void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
+
+  /* visualize new trajectories */
+  void visualization();
 
 public:
   TopoReplanFSM(/* args */) {}
