@@ -308,19 +308,21 @@ void PlanningVisualization::drawBsplinesPhase1(vector<NonUniformBspline> &bsplin
 }
 
 void PlanningVisualization::drawBsplinesPhase2(vector<NonUniformBspline> &bsplines, double size) {
+  if (bsplines.size() == 0) return;
+
   vector<Eigen::Vector3d> empty;
 
-  for (int i = 0; i < last_bspline_phase2_num_; ++i) {
-    drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "B-Spline", i, 0);
-    drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "B-Spline", i + 50, 0);
+  // for (int i = 0; i < last_bspline_phase2_num_; ++i) {
+    // drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "BSplinePhase2", i, 0);
+    // drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "B-Spline", i + 50, 0);
     // displaySphereList(empty, size, Eigen::Vector4d(1, 0, 0, 1), BSPLINE + (50 + i) % 100);
     // displaySphereList(empty, size, Eigen::Vector4d(1, 0, 0, 1), BSPLINE_CTRL_PT + (50 + i) % 100);
-  }
+  // }
   last_bspline_phase2_num_ = bsplines.size();
 
   for (int i = 0; i < bsplines.size(); ++i) {
     drawBspline(bsplines[i], size, getColor(double(i) / bsplines.size(), 0.6), false, 1.5 * size,
-                getColor(double(i) / bsplines.size()), i);
+                getColor(double(i) / bsplines.size()), i + 1);
   }
 }
 
@@ -347,7 +349,7 @@ void PlanningVisualization::drawBspline(NonUniformBspline &bspline, double size,
       ctp.push_back(pt);
     }
 
-    drawSpheres(ctp, size2, color2, "CtrlPoints", BSPLINE_CTRL_PT + id, ROS_PUBLISHER::BSPLINES);
+    drawSpheres(ctp, size2, color2, "CtrlPoints", BSPLINE_CTRL_PT + id % 100, ROS_PUBLISHER::BSPLINES);
   }
 }
 
@@ -371,9 +373,9 @@ void PlanningVisualization::drawTopoGraph(list<GraphNode::Ptr> &graph, double po
       connectors.push_back((*iter)->pos_);
     }
   }
-  drawSpheres(guards, point_size, color1, "GraphNodes", GRAPH_NODE, ROS_PUBLISHER::TOPO_TRAJECTORY);
+  drawSpheres(guards, point_size, color1, "GraphGuards", GRAPH_NODE, ROS_PUBLISHER::TOPO_TRAJECTORY);
   // displaySphereList(guards, point_size, color1, GRAPH_NODE, 1);
-  drawSpheres(connectors, point_size, color2, "GraphCon", GRAPH_NODE + 50, ROS_PUBLISHER::TOPO_TRAJECTORY);
+  drawSpheres(connectors, point_size, color2, "GraphConnect", GRAPH_NODE + 50, ROS_PUBLISHER::TOPO_TRAJECTORY);
   // displaySphereList(connectors, point_size, color2, GRAPH_NODE + 50, 1);
 
   /* draw graph edge */

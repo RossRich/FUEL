@@ -33,6 +33,12 @@ public:
   void planExploreTraj(const vector<Eigen::Vector3d> &tour, const Eigen::Vector3d &cur_vel, const Eigen::Vector3d &cur_acc,
                        const double &time_lb = -1);
   bool planGlobalTraj(const Eigen::Vector3d &start_pos);
+
+  /**
+   * Модифицирует вход траек
+   */
+  bool topoReplanLocalTraj(const ros::Time &time_now, const bool is_collide);
+  bool topoReplanTraj(NonUniformBspline &traj, const ros::Time &time_now, const bool is_collide);
   bool topoReplan(bool collide);
 
   void planYaw(const Eigen::Vector3d &start_yaw);
@@ -68,6 +74,15 @@ private:
                           vector<Eigen::Vector3d> &start_pts, vector<Eigen::Vector3d> &end_pts);
 
   void optimizeTopoBspline(double start_t, double duration, vector<Eigen::Vector3d> guide_path, int traj_id);
+
+  /**
+   * Определить локальную траекторию
+   *
+   * @param start_t Начало локальной траектории на глобальной (время)
+   * @param[out] dt Время между контрольными точками на локальной траектории
+   * @param[out] duration Общее время пути по локальной траектории
+   * @return Крнтрольные точки локальной траектории (x,y,z)
+   */
   Eigen::MatrixXd paramLocalTraj(double start_t, double &dt, double &duration);
   Eigen::MatrixXd reparamLocalTraj(const double &start_t, const double &duration, const double &dt);
 
@@ -87,7 +102,8 @@ public:
   void planYawActMap(const Eigen::Vector3d &start_yaw);
   void test();
   void searchFrontier(const Eigen::Vector3d &p);
-  bool find_path();
+  bool findTopoPath();
+  bool planLocaTraj(const double start_time, const ros::Time &time_now);
 
 private:
   unique_ptr<FrontierFinder> frontier_finder_;

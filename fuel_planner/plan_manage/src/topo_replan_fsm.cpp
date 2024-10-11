@@ -93,6 +93,7 @@ void TopoReplanFSM::changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos
 void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
   static ros::Time wait_pub_timer = ros::Time::now() + ros::Duration(1);
   static uint _replan_num = 0;
+  static uint failed_num = 0;
 
   switch (exec_state_) {
   case INIT: {
@@ -128,11 +129,16 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
     start_yaw_(1) = start_yaw_(2) = 0.0;
 
     /* topo path finding and optimization */
-    if (callTopologicalTraj(1)) {
+    if (callTopologicalTraj(PLAN_STEP::FULL)) {
       changeFSMExecState(EXEC_TRAJ, "FSM");
     } else {
-      ROS_WARN_STREAM(_label << "Planning failed. Retrying...");
-      ros::Duration(0.5).sleep();
+      ++failed_num;
+      ROS_WARN("%sPlanning failed. Retrying... [%u/%u]", _label, failed_num, _raplan_max_failed);
+      if (failed_num > _raplan_max_failed) {
+        failed_num = 0;
+        changeFSMExecState(WAIT_TARGET, "FSM");
+      } else
+        ros::Duration(0.5).sleep();
     }
 
     break;
@@ -175,7 +181,7 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
     start_yaw_(1) = local_traj.yawdot_traj_.evaluateDeBoorT(t_cur)[0];
     start_yaw_(2) = local_traj.yawdotdot_traj_.evaluateDeBoorT(t_cur)[0];
 
-    if (not callTopologicalTraj(2))
+    if (not callTopologicalTraj(PLAN_STEP::REFINE))
       ROS_DEBUG("%s[%u]Replan failed", _label, _replan_num); //< если возвращает false, то возможно путь был стерт
 
     changeFSMExecState(EXEC_TRAJ, "FSM");
@@ -256,9 +262,13 @@ void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
     collide_ = not planner_manager_->checkTrajCollision(dist); //< функция возвращает false если есть препядствие.
     if (collide_) {
       ROS_WARN("%sCurrent traj %0.2f m to collision", _label, dist);
-      if (dist > 1.0) {
+      auto &glob_traj = planner_manager_->global_data_;
+
+      bool is_collide_on_start = (ros::Time::now() - glob_traj.global_start_time_).toSec() < 0.1;
+      if (dist > 1.0 or is_collide_on_start) {
         changeFSMExecState(REPLAN_TRAJ, "SAFETY");
-        ROS_WARN_STREAM(_label << "Replan. Collision detected");
+        ROS_WARN_STREAM_COND(not is_collide_on_start, _label << "Replan. Collision detected");
+        ROS_WARN_STREAM_COND(is_collide_on_start, _label << "Replan. Collision detected on start");
       } else {
         new_pub_.publish(std_msgs::Empty()); //< остановка
         have_target_ = false;
@@ -269,74 +279,71 @@ void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
   }
 }
 
+bool TopoReplanFSM::callTopologicalTraj(PLAN_STEP step) {
+  if (step == PLAN_STEP::FULL)
+    if (not planner_manager_->planGlobalTraj(start_pt_)) return false;
+
+  auto &glob_data = planner_manager_->global_data_;
+  auto time_now = ros::Time::now();
+  double local_traj_start = (time_now - glob_data.global_start_time_).toSec(); //< начало локальной траектории на глобальной
+  if (not planner_manager_->planLocaTraj(local_traj_start, time_now)) return false;
+  if (not planner_manager_->topoReplanLocalTraj(time_now, collide_)) return false;
+  auto &local_traj = planner_manager_->local_data_;
+  // double local_traj_end = local_traj_start + local_traj.duration_;
+  
+
+  // повторно считает производные локальной траектории
+  // planner_manager_->global_data_.setLocalTraj(local_data.position_traj_, local_traj_start, local_traj_end,
+  // local_data.duration_);
+
+  if (!act_map_) {
+    // Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
+    // planner_manager_->planYawExplore(start_yaw_, start_yaw_[0], false, 1);
+    planner_manager_->planYaw(start_yaw_);
+  } else {
+    planner_manager_->planYawActMap(start_yaw_);
+  }
+
+  /* publish newest trajectory to server */
+
+  /* publish traj */
+  bspline::Bspline bspline;
+  bspline.order = planner_manager_->pp_.bspline_degree_;
+  bspline.start_time = local_traj.start_time_;
+  bspline.traj_id = local_traj.traj_id_;
+
+  Eigen::MatrixXd pos_pts = local_traj.position_traj_.getControlPoint();
+
+  for (int i = 0; i < pos_pts.rows(); ++i) {
+    geometry_msgs::Point pt;
+    pt.x = pos_pts(i, 0);
+    pt.y = pos_pts(i, 1);
+    pt.z = pos_pts(i, 2);
+    bspline.pos_pts.push_back(pt);
+  }
+
+  Eigen::VectorXd knots = local_traj.position_traj_.getKnot();
+  for (int i = 0; i < knots.rows(); ++i) {
+    bspline.knots.push_back(knots(i));
+  }
+
+  Eigen::MatrixXd yaw_pts = local_traj.yaw_traj_.getControlPoint();
+  for (int i = 0; i < yaw_pts.rows(); ++i) {
+    double yaw = yaw_pts(i, 0);
+    bspline.yaw_pts.push_back(yaw);
+  }
+  bspline.yaw_dt = local_traj.yaw_traj_.getKnotSpan();
+  bspline_pub_.publish(bspline);
+
+  if (_enable_viz) visualization();
+
+  return true;
+}
+
 void TopoReplanFSM::frontierCallback(const ros::TimerEvent &e) {
   if (!have_odom_) return;
   planner_manager_->searchFrontier(odom_pos_);
   visualization_->drawFrontier(planner_manager_->plan_data_.frontiers_);
-}
-
-bool TopoReplanFSM::callTopologicalTraj(int step) {
-  bool plan_success;
-
-  if (step == 1) plan_success = planner_manager_->planGlobalTraj(start_pt_); //< здесь есть расчет локальной траектории, зачем?
-
-  replan_time_.push_back(0.0);
-  auto t1 = ros::Time::now();
-  plan_success = planner_manager_->topoReplan(collide_);
-  replan_time_[replan_time_.size() - 1] += (ros::Time::now() - t1).toSec();
-
-  if (plan_success) {
-    if (!act_map_) {
-      // Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
-      // planner_manager_->planYawExplore(start_yaw_, start_yaw_[0], false, 1);
-      planner_manager_->planYaw(start_yaw_);
-    } else {
-      replan_time2_.push_back(0);
-      auto t1 = ros::Time::now();
-      planner_manager_->planYawActMap(start_yaw_);
-      replan_time2_[replan_time2_.size() - 1] += (ros::Time::now() - t1).toSec();
-    }
-
-    LocalTrajData *local_traj = &planner_manager_->local_data_;
-
-    /* publish newest trajectory to server */
-
-    /* publish traj */
-    bspline::Bspline bspline;
-    bspline.order = planner_manager_->pp_.bspline_degree_;
-    bspline.start_time = local_traj->start_time_;
-    bspline.traj_id = local_traj->traj_id_;
-
-    Eigen::MatrixXd pos_pts = local_traj->position_traj_.getControlPoint();
-
-    for (int i = 0; i < pos_pts.rows(); ++i) {
-      geometry_msgs::Point pt;
-      pt.x = pos_pts(i, 0);
-      pt.y = pos_pts(i, 1);
-      pt.z = pos_pts(i, 2);
-      bspline.pos_pts.push_back(pt);
-    }
-
-    Eigen::VectorXd knots = local_traj->position_traj_.getKnot();
-    for (int i = 0; i < knots.rows(); ++i) {
-      bspline.knots.push_back(knots(i));
-    }
-
-    Eigen::MatrixXd yaw_pts = local_traj->yaw_traj_.getControlPoint();
-    for (int i = 0; i < yaw_pts.rows(); ++i) {
-      double yaw = yaw_pts(i, 0);
-      bspline.yaw_pts.push_back(yaw);
-    }
-    bspline.yaw_dt = local_traj->yaw_traj_.getKnotSpan();
-
-    bspline_pub_.publish(bspline);
-
-    if (_enable_viz) visualization();
-
-    return true;
-  } else {
-    return false;
-  }
 }
 
 void TopoReplanFSM::visualization() {
@@ -348,12 +355,16 @@ void TopoReplanFSM::visualization() {
   visualization_->drawBspline(local_traj->position_traj_, 0.08, Eigen::Vector4d(1.0, 0.0, 0.0, 1), true, 0.15,
                               Eigen::Vector4d(1, 1, 0, 1));
 
-  auto color1 = Eigen::Vector4d(223, 100, 153, 255) / 255.0;
-  auto color2 = Eigen::Vector4d(62, 156, 190, 255) / 255.0;
-  auto color3 = Eigen::Vector4d(72, 67, 70, 255) / 255.0;
+  auto color1 = Eigen::Vector4d(210, 0, 98, 255);
+  auto color2 = Eigen::Vector4d(214, 88, 159, 255);
+  auto color3 = Eigen::Vector4d(196, 228, 255, 255);
+  color1 /= 255.0;
+  color2 /= 255.0;
+  color3 /= 255.0;
+
   visualization_->drawTopoGraph(plan_data.topo_graph_, 0.08, 0.05, color1, color2, color3);
 
-  // visualization_->drawBsplinesPhase2(plan_data.topo_traj_pos1_, 0.08);
+  visualization_->drawBsplinesPhase2(plan_data.topo_traj_pos2_, 0.08);
   // visualization_->drawViewConstraint(plan_data.view_cons_);
 
   visualization_->drawYawTraj(local_traj->position_traj_, local_traj->yaw_traj_, plan_data.dt_yaw_);

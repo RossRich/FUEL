@@ -2,7 +2,7 @@
   <!-- global parameters -->
   <arg name="map_size_x" default="10.0"/>
   <arg name="map_size_y" default="10.0"/>
-  <arg name="map_size_z" default=" 3"/>
+  <arg name="map_size_z" default="3.0"/>
   <arg name="log_output" default="screen"/>
   <arg name="enable_viz" default="true"/>
   
@@ -20,6 +20,8 @@
 
   <arg name="max_vel" default="0.6"/>
   <arg name="max_acc" default="2.0"/>
+
+  <arg name="waypoints_dist" default="3.0"/> <!-- Такое же значение должно быть в behavior -->
   
   <!-- main algorithm params -->
   <include file="$(find plan_manage)/launch/topo_algorithm.xml">
@@ -57,23 +59,6 @@
     <!-- 2: use global waypoints below  -->
     <!-- 3: use global reference path passing points below  -->
     <arg name="flight_type" value="1" />
-
-    <!-- global waypoints -->
-    <arg name="point_num" value="1" />
-
-    <arg name="point0_x" value="19.99" />
-    <!-- <arg name="point0_x" value="2" /> -->
-    <arg name="point0_y" value="0.0" />
-    <arg name="point0_z" value="1.0" />
-
-    <!-- set more waypoints if you need -->
-    <arg name="point1_x" value="19.99" />
-    <arg name="point1_y" value="0.0" />
-    <arg name="point1_z" value="1.0" />
-
-    <arg name="point2_x" value="-19.0" />
-    <arg name="point2_y" value="0.0" />
-    <arg name="point2_z" value="1.0" />
   </include>
 
   <!-- trajectory server -->
@@ -93,19 +78,7 @@
     <param name="waypoint_type" value="dense"/>
     <param name="size_x"        value="$(arg map_size_x)" type="double"/>
     <param name="size_y"        value="$(arg map_size_y)" type="double"/>
-    <param name="point_dist"    value="3" type="double"/>
+    <param name="point_dist"    value="$(arg waypoints_dist)" type="double"/>
     <param name="offset"        value="1.0" type="double"/>
   </node>
-
-  <!-- use simulator -->
-  <!-- <include file="$(find plan_manage)/launch/simulator.xml">
-    <arg name="map_size_x_" value="$(arg map_size_x)"/>
-    <arg name="map_size_y_" value="$(arg map_size_y)"/>
-    <arg name="map_size_z_" value="$(arg map_size_z)"/>
-    <arg name="c_num" value="30"/>
-    <arg name="p_num" value="130"/>
-
-    <arg name="odometry_topic" value="$(arg odom_topic)" />
-  </include> -->
-
 </launch>

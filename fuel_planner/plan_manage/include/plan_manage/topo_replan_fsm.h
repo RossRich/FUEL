@@ -23,6 +23,9 @@ using std::vector;
 
 namespace fast_planner {
 class TopoReplanFSM {
+public:
+  enum PLAN_STEP { FULL, REFINE };
+
 private:
   const char *_label = "[topo_fsm] ";
 
@@ -36,6 +39,7 @@ private:
 
   /* parameters */
   int target_type_; // 1 mannual select, 2 hard code
+  uint _raplan_max_failed = 10;
   double replan_distance_threshold_, replan_time_threshold_;
   double waypoints_[50][3];
   int waypoint_num_;
@@ -61,7 +65,7 @@ private:
   ros::Publisher _wait_goal_pub;
 
   /* helper functions */
-  bool callTopologicalTraj(int step); // topo path guided gradient-based
+  bool callTopologicalTraj(PLAN_STEP step); // topo path guided gradient-based
                                       // optimization; 1: new, 2: replan
   void changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call);
 
@@ -80,10 +84,6 @@ public:
   ~TopoReplanFSM() {}
 
   void init(ros::NodeHandle &nh);
-
-  // benchmark
-  vector<double> replan_time_;
-  vector<double> replan_time2_;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
