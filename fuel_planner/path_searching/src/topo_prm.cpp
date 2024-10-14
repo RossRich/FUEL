@@ -1,17 +1,15 @@
 #include <path_searching/topo_prm.h>
-#include <thread>
-#include <random>
-#include <plan_env/sdf_map.h>
 #include <plan_env/raycast.h>
+#include <plan_env/sdf_map.h>
+#include <random>
+#include <thread>
 
 namespace fast_planner {
-TopologyPRM::TopologyPRM(/* args */) {
-}
+TopologyPRM::TopologyPRM() {}
 
-TopologyPRM::~TopologyPRM() {
-}
+TopologyPRM::~TopologyPRM() {}
 
-void TopologyPRM::init(ros::NodeHandle& nh) {
+void TopologyPRM::init(ros::NodeHandle &nh) {
   graph_.clear();
   eng_ = default_random_engine(rd_());
   rand_pos_ = uniform_real_distribution<double>(-1.0, 1.0);
@@ -40,11 +38,10 @@ void TopologyPRM::init(ros::NodeHandle& nh) {
   }
 }
 
-void TopologyPRM::findTopoPaths(Eigen::Vector3d start, Eigen::Vector3d end,
-                                vector<Eigen::Vector3d> start_pts, vector<Eigen::Vector3d> end_pts,
-                                list<GraphNode::Ptr>& graph, vector<vector<Eigen::Vector3d>>& raw_paths,
-                                vector<vector<Eigen::Vector3d>>& filtered_paths,
-                                vector<vector<Eigen::Vector3d>>& select_paths) {
+void TopologyPRM::findTopoPaths(Eigen::Vector3d start, Eigen::Vector3d end, vector<Eigen::Vector3d> start_pts,
+                                vector<Eigen::Vector3d> end_pts, list<GraphNode::Ptr> &graph,
+                                vector<vector<Eigen::Vector3d>> &raw_paths, vector<vector<Eigen::Vector3d>> &filtered_paths,
+                                vector<vector<Eigen::Vector3d>> &select_paths) {
   ros::Time t1, t2;
 
   double graph_time, search_time, short_time, prune_time, select_time;
@@ -92,9 +89,8 @@ void TopologyPRM::findTopoPaths(Eigen::Vector3d start, Eigen::Vector3d end,
 
   double total_time = graph_time + search_time + short_time + prune_time + select_time;
 
-  std::cout << "\n[Topo]: total time: " << total_time << ", graph: " << graph_time
-            << ", search: " << search_time << ", short: " << short_time << ", prune: " << prune_time
-            << ", select: " << select_time << std::endl;
+  std::cout << "\n[Topo]: total time: " << total_time << ", graph: " << graph_time << ", search: " << search_time
+            << ", short: " << short_time << ", prune: " << prune_time << ", select: " << select_time << std::endl;
 }
 
 list<GraphNode::Ptr> TopologyPRM::createGraph(Eigen::Vector3d start, Eigen::Vector3d end) {
@@ -134,13 +130,12 @@ list<GraphNode::Ptr> TopologyPRM::createGraph(Eigen::Vector3d start, Eigen::Vect
   double sample_time = 0.0;
   Eigen::Vector3d pt;
   ros::Time t1, t2;
+  double dist = 10000;
   while (sample_time < max_sample_time_ && sample_num < max_sample_num_) {
     t1 = ros::Time::now();
-
     pt = getSample();
     ++sample_num;
-    double dist;
-    Eigen::Vector3d grad;
+    // Eigen::Vector3d grad;
     // edt_environment_->evaluateEDTWithGrad(pt, -1.0, dist, grad);
     dist = edt_environment_->evaluateCoarseEDT(pt, -1.0);
     if (dist <= clearance_) {
@@ -247,10 +242,10 @@ Eigen::Vector3d TopologyPRM::getSample() {
   pt = rotation_ * pt + translation_;
 
   return pt;
-} 
+}
 
-bool TopologyPRM::lineVisib(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2, double thresh,
-                            Eigen::Vector3d& pc, int caster_id) {
+bool TopologyPRM::lineVisib(const Eigen::Vector3d &p1, const Eigen::Vector3d &p2, double thresh, Eigen::Vector3d &pc,
+                            int caster_id) {
   Eigen::Vector3d ray_pt;
   Eigen::Vector3i pt_id;
   double dist;
@@ -272,8 +267,7 @@ bool TopologyPRM::lineVisib(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2
 void TopologyPRM::pruneGraph() {
   /* prune useless node */
   if (graph_.size() > 2) {
-    for (list<GraphNode::Ptr>::iterator iter1 = graph_.begin();
-         iter1 != graph_.end() && graph_.size() > 2; ++iter1) {
+    for (list<GraphNode::Ptr>::iterator iter1 = graph_.begin(); iter1 != graph_.end() && graph_.size() > 2; ++iter1) {
       if ((*iter1)->id_ <= 1) continue;
 
       /* core */
@@ -281,8 +275,8 @@ void TopologyPRM::pruneGraph() {
       if ((*iter1)->neighbors_.size() <= 1) {
         // delete this node from others' neighbor
         for (list<GraphNode::Ptr>::iterator iter2 = graph_.begin(); iter2 != graph_.end(); ++iter2) {
-          for (vector<GraphNode::Ptr>::iterator it_nb = (*iter2)->neighbors_.begin();
-               it_nb != (*iter2)->neighbors_.end(); ++it_nb) {
+          for (vector<GraphNode::Ptr>::iterator it_nb = (*iter2)->neighbors_.begin(); it_nb != (*iter2)->neighbors_.end();
+               ++it_nb) {
             if ((*it_nb)->id_ == (*iter1)->id_) {
               (*iter2)->neighbors_.erase(it_nb);
               break;
@@ -298,7 +292,7 @@ void TopologyPRM::pruneGraph() {
   }
 }
 
-vector<vector<Eigen::Vector3d>> TopologyPRM::pruneEquivalent(vector<vector<Eigen::Vector3d>>& paths) {
+vector<vector<Eigen::Vector3d>> TopologyPRM::pruneEquivalent(vector<vector<Eigen::Vector3d>> &paths) {
   vector<vector<Eigen::Vector3d>> pruned_paths;
   if (paths.size() < 1) return pruned_paths;
 
@@ -336,8 +330,7 @@ vector<vector<Eigen::Vector3d>> TopologyPRM::pruneEquivalent(vector<vector<Eigen
   return pruned_paths;
 }
 
-vector<vector<Eigen::Vector3d>> TopologyPRM::selectShortPaths(vector<vector<Eigen::Vector3d>>& paths,
-                                                              int step) {
+vector<vector<Eigen::Vector3d>> TopologyPRM::selectShortPaths(vector<vector<Eigen::Vector3d>> &paths, int step) {
   /* ---------- only reserve top short path ---------- */
   vector<vector<Eigen::Vector3d>> short_paths;
   vector<Eigen::Vector3d> short_path;
@@ -376,8 +369,7 @@ vector<vector<Eigen::Vector3d>> TopologyPRM::selectShortPaths(vector<vector<Eige
   return short_paths;
 }
 
-bool TopologyPRM::sameTopoPath(const vector<Eigen::Vector3d>& path1,
-                               const vector<Eigen::Vector3d>& path2, double thresh) {
+bool TopologyPRM::sameTopoPath(const vector<Eigen::Vector3d> &path1, const vector<Eigen::Vector3d> &path2, double thresh) {
   // calc the length
   double len1 = pathLength(path1);
   double len2 = pathLength(path2);
@@ -401,7 +393,7 @@ bool TopologyPRM::sameTopoPath(const vector<Eigen::Vector3d>& path1,
   return true;
 }
 
-int TopologyPRM::shortestPath(vector<vector<Eigen::Vector3d>>& paths) {
+int TopologyPRM::shortestPath(vector<vector<Eigen::Vector3d>> &paths) {
   int short_id = -1;
   double min_len = 100000000;
   for (int i = 0; i < paths.size(); ++i) {
@@ -414,7 +406,7 @@ int TopologyPRM::shortestPath(vector<vector<Eigen::Vector3d>>& paths) {
   return short_id;
 }
 
-double TopologyPRM::pathLength(const vector<Eigen::Vector3d>& path) {
+double TopologyPRM::pathLength(const vector<Eigen::Vector3d> &path) {
   double length = 0.0;
   if (path.size() < 2) return length;
 
@@ -424,7 +416,7 @@ double TopologyPRM::pathLength(const vector<Eigen::Vector3d>& path) {
   return length;
 }
 
-vector<Eigen::Vector3d> TopologyPRM::discretizePath(const vector<Eigen::Vector3d>& path, int pt_num) {
+vector<Eigen::Vector3d> TopologyPRM::discretizePath(const vector<Eigen::Vector3d> &path, int pt_num) {
   vector<double> len_list;
   len_list.push_back(0.0);
 
@@ -460,8 +452,7 @@ vector<Eigen::Vector3d> TopologyPRM::discretizePath(const vector<Eigen::Vector3d
   return dis_path;
 }
 
-void TopologyPRM::pathToGuidePts(vector<Eigen::Vector3d>& path, const int& pt_num,
-                                 vector<Eigen::Vector3d>& pts) {
+void TopologyPRM::pathToGuidePts(vector<Eigen::Vector3d> &path, const int &pt_num, vector<Eigen::Vector3d> &pts) {
   pts = discretizePath(path, pt_num);
 }
 
@@ -565,7 +556,7 @@ vector<Eigen::Vector3d> TopologyPRM::discretizePath(vector<Eigen::Vector3d> path
   return dis_path;
 }
 
-vector<vector<Eigen::Vector3d>> TopologyPRM::discretizePaths(vector<vector<Eigen::Vector3d>>& path) {
+vector<vector<Eigen::Vector3d>> TopologyPRM::discretizePaths(vector<vector<Eigen::Vector3d>> &path) {
   vector<vector<Eigen::Vector3d>> dis_paths;
   vector<Eigen::Vector3d> dis_path;
 
@@ -578,7 +569,7 @@ vector<vector<Eigen::Vector3d>> TopologyPRM::discretizePaths(vector<vector<Eigen
   return dis_paths;
 }
 
-Eigen::Vector3d TopologyPRM::getOrthoPoint(const vector<Eigen::Vector3d>& path) {
+Eigen::Vector3d TopologyPRM::getOrthoPoint(const vector<Eigen::Vector3d> &path) {
   Eigen::Vector3d x1 = path.front();
   Eigen::Vector3d x2 = path.back();
 
@@ -640,7 +631,7 @@ vector<vector<Eigen::Vector3d>> TopologyPRM::searchPaths() {
   return raw_paths_;
 }
 
-void TopologyPRM::depthFirstSearch(vector<GraphNode::Ptr>& vis) {
+void TopologyPRM::depthFirstSearch(vector<GraphNode::Ptr> &vis) {
   GraphNode::Ptr cur = vis.back();
 
   for (int i = 0; i < cur->neighbors_.size(); ++i) {
@@ -683,9 +674,7 @@ void TopologyPRM::depthFirstSearch(vector<GraphNode::Ptr>& vis) {
   }
 }
 
-void TopologyPRM::setEnvironment(const EDTEnvironment::Ptr& env) {
-  this->edt_environment_ = env;
-}
+void TopologyPRM::setEnvironment(const EDTEnvironment::Ptr &env) { this->edt_environment_ = env; }
 
 bool TopologyPRM::triangleVisib(Eigen::Vector3d pt, Eigen::Vector3d p1, Eigen::Vector3d p2) {
   // get the traversing points along p1-p2
@@ -703,10 +692,12 @@ bool TopologyPRM::triangleVisib(Eigen::Vector3d pt, Eigen::Vector3d p1, Eigen::V
 
   // test visibility
   for (int i = 0; i < pts.size(); ++i) {
-    { return false; }
+    {
+      return false;
+    }
   }
 
   return true;
 }
 // TopologyPRM::
-}  // namespace fast_planner
+} // namespace fast_planner

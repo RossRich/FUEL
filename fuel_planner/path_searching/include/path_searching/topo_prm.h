@@ -38,12 +38,10 @@ public:
     }
     std::cout << "[Topo]: merged path num: " << combine_num_ << std::endl;
   }
-  TopoIterator() {
-  }
-  ~TopoIterator() {
-  }
+  TopoIterator() {}
+  ~TopoIterator() {}
 
-  bool nextIndex(vector<int>& index) {
+  bool nextIndex(vector<int> &index) {
     index = cur_index_;
     cur_num_ += 1;
 
@@ -65,16 +63,14 @@ public:
 
   enum NODE_STATE { NEW = 1, CLOSE = 2, OPEN = 3 };
 
-  GraphNode(/* args */) {
-  }
+  GraphNode(/* args */) {}
   GraphNode(Eigen::Vector3d pos, NODE_TYPE type, int id) {
     pos_ = pos;
     type_ = type;
     state_ = NEW;
     id_ = id;
   }
-  ~GraphNode() {
-  }
+  ~GraphNode() {}
 
   vector<shared_ptr<GraphNode>> neighbors_;
   Eigen::Vector3d pos_;
@@ -88,7 +84,7 @@ public:
 class TopologyPRM {
 private:
   /* data */
-  EDTEnvironment::Ptr edt_environment_;  // environment representation
+  EDTEnvironment::Ptr edt_environment_; // environment representation
 
   // sampling generator
   std::random_device rd_;
@@ -128,35 +124,33 @@ private:
   list<GraphNode::Ptr> createGraph(Eigen::Vector3d start, Eigen::Vector3d end);
   vector<vector<Eigen::Vector3d>> searchPaths();
   void shortcutPaths();
-  vector<vector<Eigen::Vector3d>> pruneEquivalent(vector<vector<Eigen::Vector3d>>& paths);
-  vector<vector<Eigen::Vector3d>> selectShortPaths(vector<vector<Eigen::Vector3d>>& paths, int step);
+  vector<vector<Eigen::Vector3d>> pruneEquivalent(vector<vector<Eigen::Vector3d>> &paths);
+  vector<vector<Eigen::Vector3d>> selectShortPaths(vector<vector<Eigen::Vector3d>> &paths, int step);
 
   /* ---------- helper ---------- */
   inline Eigen::Vector3d getSample();
-  vector<GraphNode::Ptr> findVisibGuard(Eigen::Vector3d pt);  // find pairs of visibile
-                                                              // guard
+  vector<GraphNode::Ptr> findVisibGuard(Eigen::Vector3d pt); // find pairs of visibile
+                                                             // guard
   bool needConnection(GraphNode::Ptr g1, GraphNode::Ptr g2,
-                      Eigen::Vector3d pt);  // test redundancy with existing
-                                            // connection between two guard
-  bool lineVisib(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2, double thresh,
-                 Eigen::Vector3d& pc, int caster_id = 0);
+                      Eigen::Vector3d pt); // test redundancy with existing
+                                           // connection between two guard
+  bool lineVisib(const Eigen::Vector3d &p1, const Eigen::Vector3d &p2, double thresh, Eigen::Vector3d &pc, int caster_id = 0);
   bool triangleVisib(Eigen::Vector3d pt, Eigen::Vector3d p1, Eigen::Vector3d p2);
   void pruneGraph();
 
-  void depthFirstSearch(vector<GraphNode::Ptr>& vis);
+  void depthFirstSearch(vector<GraphNode::Ptr> &vis);
 
   vector<Eigen::Vector3d> discretizeLine(Eigen::Vector3d p1, Eigen::Vector3d p2);
-  vector<vector<Eigen::Vector3d>> discretizePaths(vector<vector<Eigen::Vector3d>>& path);
+  vector<vector<Eigen::Vector3d>> discretizePaths(vector<vector<Eigen::Vector3d>> &path);
 
   vector<Eigen::Vector3d> discretizePath(vector<Eigen::Vector3d> path);
   void shortcutPath(vector<Eigen::Vector3d> path, int path_id, int iter_num = 1);
 
-  vector<Eigen::Vector3d> discretizePath(const vector<Eigen::Vector3d>& path, int pt_num);
-  bool sameTopoPath(const vector<Eigen::Vector3d>& path1, const vector<Eigen::Vector3d>& path2,
-                    double thresh);
-  Eigen::Vector3d getOrthoPoint(const vector<Eigen::Vector3d>& path);
+  vector<Eigen::Vector3d> discretizePath(const vector<Eigen::Vector3d> &path, int pt_num);
+  bool sameTopoPath(const vector<Eigen::Vector3d> &path1, const vector<Eigen::Vector3d> &path2, double thresh);
+  Eigen::Vector3d getOrthoPoint(const vector<Eigen::Vector3d> &path);
 
-  int shortestPath(vector<vector<Eigen::Vector3d>>& paths);
+  int shortestPath(vector<vector<Eigen::Vector3d>> &paths);
 
 public:
   double clearance_;
@@ -164,20 +158,18 @@ public:
   TopologyPRM(/* args */);
   ~TopologyPRM();
 
-  void init(ros::NodeHandle& nh);
+  void init(ros::NodeHandle &nh);
 
-  void setEnvironment(const EDTEnvironment::Ptr& env);
+  void setEnvironment(const EDTEnvironment::Ptr &env);
 
   void findTopoPaths(Eigen::Vector3d start, Eigen::Vector3d end, vector<Eigen::Vector3d> start_pts,
-                     vector<Eigen::Vector3d> end_pts, list<GraphNode::Ptr>& graph,
-                     vector<vector<Eigen::Vector3d>>& raw_paths,
-                     vector<vector<Eigen::Vector3d>>& filtered_paths,
-                     vector<vector<Eigen::Vector3d>>& select_paths);
+                     vector<Eigen::Vector3d> end_pts, list<GraphNode::Ptr> &graph, vector<vector<Eigen::Vector3d>> &raw_paths,
+                     vector<vector<Eigen::Vector3d>> &filtered_paths, vector<vector<Eigen::Vector3d>> &select_paths);
 
-  double pathLength(const vector<Eigen::Vector3d>& path);
-  void pathToGuidePts(vector<Eigen::Vector3d>& path, const int& pt_num, vector<Eigen::Vector3d>& pts);
+  double pathLength(const vector<Eigen::Vector3d> &path);
+  void pathToGuidePts(vector<Eigen::Vector3d> &path, const int &pt_num, vector<Eigen::Vector3d> &pts);
 };
 
-}  // namespace fast_planner
+} // namespace fast_planner
 
 #endif

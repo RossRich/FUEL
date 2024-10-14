@@ -34,11 +34,22 @@ public:
                        const double &time_lb = -1);
   bool planGlobalTraj(const Eigen::Vector3d &start_pos);
 
-  /**
-   * Модифицирует вход траек
-   */
   bool topoReplanLocalTraj(const ros::Time &time_now, const bool is_collide);
+
+  /**
+   * Работа с троекторией
+   * @warning trag меняется. Сохранить если нужна старая траектория
+   * 
+   * @param[in,out] traj Траектория для оптимизации
+   * @param time_now Начало перестраения траектории
+   * @param is_collide Обнаружено препядствие?
+   * @return флаг успеха
+   */
   bool topoReplanTraj(NonUniformBspline &traj, const ros::Time &time_now, const bool is_collide);
+
+  /**
+   * Deprecated
+   */
   bool topoReplan(bool collide);
 
   void planYaw(const Eigen::Vector3d &start_yaw);
@@ -47,7 +58,10 @@ public:
   void initPlanModules(ros::NodeHandle &nh);
   void setGlobalWaypoints(vector<Eigen::Vector3d> &waypoints);
 
+  bool fixPointInCollision(Eigen::Vector3d &point_in_collision);
   bool checkTrajCollision(double &distance);
+  void findCollisionRange(vector<Eigen::Vector3d> &colli_start, vector<Eigen::Vector3d> &colli_end,
+                          vector<Eigen::Vector3d> &start_pts, vector<Eigen::Vector3d> &end_pts);
   void calcNextYaw(const double &last_yaw, double &yaw);
 
   PlanParameters pp_;
@@ -69,9 +83,6 @@ private:
   void updateTrajInfo();
 
   // topology guided optimization
-
-  void findCollisionRange(vector<Eigen::Vector3d> &colli_start, vector<Eigen::Vector3d> &colli_end,
-                          vector<Eigen::Vector3d> &start_pts, vector<Eigen::Vector3d> &end_pts);
 
   void optimizeTopoBspline(double start_t, double duration, vector<Eigen::Vector3d> guide_path, int traj_id);
 

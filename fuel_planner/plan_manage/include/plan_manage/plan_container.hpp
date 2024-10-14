@@ -24,7 +24,7 @@ public:
   double time_change_;
   double last_time_inc_;
 
-  GlobalTrajData(/* args */) {}
+  GlobalTrajData() {}
 
   ~GlobalTrajData() {}
 

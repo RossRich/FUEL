@@ -87,37 +87,6 @@ void FastPlannerManager::initPlanModules(ros::NodeHandle &nh) {
 
 void FastPlannerManager::setGlobalWaypoints(vector<Eigen::Vector3d> &waypoints) { plan_data_.global_waypoints_ = waypoints; }
 
-bool FastPlannerManager::checkTrajCollision(double &distance) {
-  double t_now = (ros::Time::now() - local_data_.start_time_).toSec();
-
-  Eigen::Vector3d cur_pt = local_data_.position_traj_.evaluateDeBoorT(t_now);
-  // double radius = 0.0;
-  Eigen::Vector3d fut_pt;
-  double fut_t = 0.02;
-
-  // while (radius < 6.0 && t_now + fut_t < local_data_.duration_) {
-  while (t_now + fut_t < local_data_.duration_) {
-    fut_pt = local_data_.position_traj_.evaluateDeBoorT(t_now + fut_t);
-    // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
-
-    // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
-    // if (dist < 0.5) {
-    // ROS_WARN_STREAM(_label << "Unsafe position: " << fut_pt.transpose() << ", dist: " << dist);
-    // }
-
-    if (sdf_map_->getInflateOccupancy(fut_pt) == 1) {
-      // distance = radius;
-      distance = (fut_pt - cur_pt).norm();
-      ROS_WARN_STREAM(_label << "Collision at  " << fut_pt.transpose());
-      return false;
-    }
-    // radius = (fut_pt - cur_pt).norm();
-    fut_t += 0.02;
-  }
-
-  return true;
-}
-
 // !SECTION
 
 // SECTION kinodynamic replanning
@@ -317,9 +286,6 @@ void FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d> &tour, co
   updateTrajInfo();
 }
 
-// !SECTION
-
-// SECTION topological replanning
 // вынести time_now
 bool FastPlannerManager::planGlobalTraj(const Eigen::Vector3d &start_pos) {
   // Generate global reference trajectory
@@ -497,6 +463,7 @@ bool FastPlannerManager::topoReplanTraj(NonUniformBspline &traj, const ros::Time
 
   return true;
 }
+
 
 bool FastPlannerManager::topoReplan(bool collide) {
   ROS_DEBUG_STREAM(_label << "TOPOREPLAN. Collide_is: " << collide);
@@ -769,11 +736,12 @@ void FastPlannerManager::findCollisionRange(vector<Eigen::Vector3d> &colli_start
   initial_traj->getTimeSpan(t_m, t_mp);
 
   /* find range of collision */
-  double t_s = -1.0, t_e;
+  double t_s = -1.0;
+  double t_e = 0.0;
+  Eigen::Vector3d ptc = initial_traj->evaluateDeBoor(t_m);
   for (double tc = t_m; tc <= t_mp + 1e-4; tc += 0.05) {
-    Eigen::Vector3d ptc = initial_traj->evaluateDeBoor(tc);
+    ptc = initial_traj->evaluateDeBoor(tc);
     safe = edt_environment_->evaluateCoarseEDT(ptc, -1.0) < topo_prm_->clearance_ ? false : true;
-    // safe = sdf_map_->getInflateOccupancy(ptc) == 1 ? false : true;
 
     if (last_safe && !safe) {
       colli_start.push_back(initial_traj->evaluateDeBoor(tc - 0.05));
@@ -788,7 +756,21 @@ void FastPlannerManager::findCollisionRange(vector<Eigen::Vector3d> &colli_start
 
   if (colli_start.size() == 0) return;
 
-  if (colli_start.size() == 1 && colli_end.size() == 0) return;
+  // if (colli_start.size() == 1 && colli_end.size() == 0) return;
+  /* if (colli_start.size() == 1 && colli_end.size() == 0) {
+    colli_end.push_back(ptc);
+    t_e = t_m + t_mp;
+  } */
+
+  if (colli_start.size() == 1 && colli_end.size() == 0) {
+    if (fixPointInCollision(ptc)) {
+      colli_end.push_back(ptc);
+      t_e = t_m + t_mp;
+    } else {
+      ROS_WARN_STREAM(_label << "Failed last point of collision path fix");
+      return;
+    }
+  }
 
   /* find start and end safe segment */
   double dt = initial_traj->getKnotSpan();
@@ -818,7 +800,68 @@ void FastPlannerManager::findCollisionRange(vector<Eigen::Vector3d> &colli_start
   }
 }
 
-// !SECTION
+bool FastPlannerManager::checkTrajCollision(double &distance) {
+  double t_now = (ros::Time::now() - local_data_.start_time_).toSec();
+
+  Eigen::Vector3d cur_pt = local_data_.position_traj_.evaluateDeBoorT(t_now);
+  // double radius = 0.0;
+  Eigen::Vector3d fut_pt;
+  double fut_t = 0.02;
+
+  // while (radius < 6.0 && t_now + fut_t < local_data_.duration_) {
+  while (t_now + fut_t < local_data_.duration_) {
+    fut_pt = local_data_.position_traj_.evaluateDeBoorT(t_now + fut_t);
+    // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
+
+    // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
+    // if (dist < 0.5) {
+    // ROS_WARN_STREAM(_label << "Unsafe position: " << fut_pt.transpose() << ", dist: " << dist);
+    // }
+
+    if (sdf_map_->getInflateOccupancy(fut_pt) == 1) {
+      // distance = radius;
+      distance = (fut_pt - cur_pt).norm();
+      ROS_WARN_STREAM(_label << "Collision at  " << fut_pt.transpose());
+      return false;
+    }
+    // radius = (fut_pt - cur_pt).norm();
+    fut_t += 0.02;
+  }
+
+  return true;
+}
+
+bool FastPlannerManager::fixPointInCollision(Eigen::Vector3d &point) {
+  // try to find a max distance goal around
+  bool new_goal = false;
+  const double dr = 0.25, dtheta = 30, dz = 0.3;
+  double dist = 0;
+  double max_dist = 0.8;
+  double &local_traj_duration = local_data_.duration_; //< ??
+  Eigen::Vector3d goal;
+  Eigen::Vector3d tmp_pt;
+
+  for (double r = dr; r <= 5 * dr + 1e-3; r += dr) {
+    for (double theta = -90; theta <= 270; theta += dtheta) {
+      for (double nz = point.z() + dz; nz >= -1 * (point.z() + dz); nz -= dz) {
+        tmp_pt.x() = point.x() + r * cos(theta / 57.3);
+        tmp_pt.y() = point.y() + r * sin(theta / 57.3);
+        tmp_pt.z() = nz;
+        // Eigen::Vector3d new_pt(new_x, new_y, new_z);
+
+        dist = pp_.dynamic_ ? edt_environment_->evaluateCoarseEDT(tmp_pt, local_traj_duration)
+                            : edt_environment_->evaluateCoarseEDT(tmp_pt, -1.0);
+
+        if (dist >= max_dist) {
+          point = tmp_pt;
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
 
 void FastPlannerManager::planYaw(const Eigen::Vector3d &start_yaw) {
   ROS_DEBUG_STREAM(_label << "Start yaw plan");
@@ -826,7 +869,7 @@ void FastPlannerManager::planYaw(const Eigen::Vector3d &start_yaw) {
   // calculate waypoints of heading
 
   auto &pos = local_data_.position_traj_;
-  double duration = pos.getTimeSum();
+  double duration = local_data_.duration_;
 
   double dt_yaw = 0.3;
   int seg_num = ceil(duration / dt_yaw);

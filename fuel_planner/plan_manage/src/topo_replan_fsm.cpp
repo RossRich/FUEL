@@ -263,12 +263,13 @@ void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
     if (collide_) {
       ROS_WARN("%sCurrent traj %0.2f m to collision", _label, dist);
       auto &glob_traj = planner_manager_->global_data_;
-
+      const double collision_dist_tresh = 1.0; //< Продолжать лететь если расстояние до препядствия больше чем
       bool is_collide_on_start = (ros::Time::now() - glob_traj.global_start_time_).toSec() < 0.1;
-      if (dist > 1.0 or is_collide_on_start) {
+      bool is_dist_to_col_ok = dist > collision_dist_tresh; 
+      if (is_dist_to_col_ok or is_collide_on_start) {
         changeFSMExecState(REPLAN_TRAJ, "SAFETY");
-        ROS_WARN_STREAM_COND(not is_collide_on_start, _label << "Replan. Collision detected");
-        ROS_WARN_STREAM_COND(is_collide_on_start, _label << "Replan. Collision detected on start");
+        ROS_WARN_STREAM_COND(is_dist_to_col_ok, _label << "Replan. Collision detected");
+        ROS_WARN_STREAM_COND(not is_dist_to_col_ok, _label << "Replan. Collision detected on start");
       } else {
         new_pub_.publish(std_msgs::Empty()); //< остановка
         have_target_ = false;
