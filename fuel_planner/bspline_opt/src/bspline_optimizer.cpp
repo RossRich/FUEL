@@ -75,7 +75,7 @@ void BsplineOptimizer::setCostFunction(const int& cost_code) {
   if (cost_function_ & VIEWCONS) cost_str += " view  |";
   if (cost_function_ & MINTIME) cost_str += " time  |";
 
-  ROS_INFO_STREAM("cost func: " << cost_str);
+  ROS_DEBUG_STREAM(_label <<  "Cost func: " << cost_str);
 }
 
 void BsplineOptimizer::setGuidePath(const vector<Eigen::Vector3d>& guide_pt) {
@@ -110,9 +110,10 @@ void BsplineOptimizer::setTimeLowerBound(const double& lb) {
 void BsplineOptimizer::optimize(Eigen::MatrixXd& points, double& dt, const int& cost_function,
                                 const int& max_num_id, const int& max_time_id) {
   if (start_state_.empty()) {
-    ROS_ERROR("Initial state undefined!");
+    ROS_ERROR_STREAM(_label << "Initial state undefined");
     return;
   }
+  
   control_points_ = points;
   knot_span_ = dt;
   max_num_id_ = max_num_id;
@@ -129,7 +130,7 @@ void BsplineOptimizer::optimize(Eigen::MatrixXd& points, double& dt, const int& 
   optimize_time_ = cost_function_ & MINTIME;
   variable_num_ = optimize_time_ ? dim_ * point_num_ + 1 : dim_ * point_num_;
   if (variable_num_ <= 0) {
-    ROS_ERROR("Empty varibale to optimization solver.");
+    ROS_ERROR_STREAM(_label << "Empty varibale to optimization solver");
     return;
   }
 
@@ -225,7 +226,7 @@ void BsplineOptimizer::optimize() {
     double final_cost;
     nlopt::result result = opt.optimize(q, final_cost);
   } catch (std::exception& e) {
-    cout << e.what() << endl;
+    ROS_FATAL_STREAM(_label << "NLOPT failed:\n" << e.what());
   }
   for (int i = 0; i < point_num_; ++i)
     for (int j = 0; j < dim_; ++j)
@@ -233,8 +234,8 @@ void BsplineOptimizer::optimize() {
   if (optimize_time_) knot_span_ = best_variable_[variable_num_ - 1];
 
   if (cost_function_ & MINTIME) {
-    std::cout << "Iter num: " << iter_num_ << ", time: " << (ros::Time::now() - t1).toSec()
-              << ", point num: " << point_num_ << ", comb time: " << comb_time << std::endl;
+    ROS_DEBUG("%siter num: %i | dt: %2.2f | points: %i | comb time: %2.2f", 
+              _label, iter_num_, (ros::Time::now() - t1).toSec(), point_num_, comb_time);
   }
 
   // Deprecated

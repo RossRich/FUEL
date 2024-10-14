@@ -105,6 +105,12 @@ NonUniformBspline NonUniformBspline::getDerivative() {
   return derivative;
 }
 
+/**
+ * Получить пограничные значения
+ * Тут высчитывается производные ks и ke так же яв-ся степенью производной (1 - скорость, 2 - ускорение)
+ * @param ks Индекс траектории (скорость, ускорение)
+ * @param ke Индекс траектории (скорость, ускорение)
+ */
 void NonUniformBspline::getBoundaryStates(const int& ks, const int& ke, vector<Eigen::Vector3d>& start,
                                           vector<Eigen::Vector3d>& end) {
   vector<NonUniformBspline> ders;

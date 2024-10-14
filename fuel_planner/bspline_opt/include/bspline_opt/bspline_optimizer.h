@@ -59,6 +59,7 @@ public:
   vector<Eigen::Vector3d> matrixToVectors(const Eigen::MatrixXd& ctrl_pts);
 
 private:
+  const char* _label = "[traj_opt] ";
   // Wrapper of cost function
   static double costFunction(const std::vector<double>& x, std::vector<double>& grad, void* func_data);
   void combineCost(const std::vector<double>& x, vector<double>& grad, double& cost);

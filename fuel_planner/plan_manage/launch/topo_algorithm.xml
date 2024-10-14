@@ -14,23 +14,14 @@
   <arg name="fy"/>
   <arg name="max_vel"/>
   <arg name="max_acc"/>
-  <arg name="point_num"/>
-  <arg name="point0_x"/>
-  <arg name="point0_y"/>
-  <arg name="point0_z"/>
-  <arg name="point1_x"/>
-  <arg name="point1_y"/>
-  <arg name="point1_z"/>
-  <arg name="point2_x"/>
-  <arg name="point2_y"/>
-  <arg name="point2_z"/>
   <arg name="flight_type"/>
-  <arg name="clearance"    default="0.9"/>
-  <arg name="z_height_max" default="2.0"/>
-  <arg name="z_height"     default="$(eval arg('z_height_max') + arg('clearance'))"/>
+  <arg name="clearance"    default="0.8"/>
+  <arg name="z_height"     default="$(eval arg('map_size_z_') + arg('clearance'))"/>
   <arg name="log_output"   default="screen"/>
   <arg name="enable_viz"   default="true"/>
   <arg name="depth_dist"   default="3.0"/> <!-- Максимальная дальность измерения камерой глубины -->
+  <arg name="local_box_inf" default="1.0"/> <!-- На сколько увеличить область пространства для работы алгоритма (локальное окно планирования - update range)-->
+  
   
   <!-- main node -->
   <node pkg="plan_manage" name="fast_planner_node" type="fast_planner_node" output="$(arg log_output)">
@@ -49,32 +40,25 @@
 
     <!-- planning fsm -->
     <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/>
-    <param name="fsm/thresh_replan" value="0.5" type="double"/>
+    <param name="fsm/act_map"     value="false" type="bool"/>
+    <!-- не производить перепланирования если дрон не успел пролететь более thresh_replan секунд -->
+    <param name="fsm/thresh_replan"    value="0.8" type="double"/>
+    <!-- не производить перепланирования если осталось thresh_no_replan метров до конца пути -->
     <param name="fsm/thresh_no_replan" value="1.0" type="double"/>
-    <param name="fsm/act_map" value="false" type="bool"/>
+    <param name="fsm/enable_viz"       value="$(arg enable_viz)" type="bool"/>
 
-    <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
-    <param name="fsm/waypoint0_x" value="$(arg point0_x)" type="double"/>
-    <param name="fsm/waypoint0_y" value="$(arg point0_y)" type="double"/>
-    <param name="fsm/waypoint0_z" value="$(arg point0_z)" type="double"/>
-    <param name="fsm/waypoint1_x" value="$(arg point1_x)" type="double"/>
-    <param name="fsm/waypoint1_y" value="$(arg point1_y)" type="double"/>
-    <param name="fsm/waypoint1_z" value="$(arg point1_z)" type="double"/>
-    <param name="fsm/waypoint2_x" value="$(arg point2_x)" type="double"/>
-    <param name="fsm/waypoint2_y" value="$(arg point2_y)" type="double"/>
-    <param name="fsm/waypoint2_z" value="$(arg point2_z)" type="double"/>
 
     <param name="sdf_map/resolution"   value="0.1" /> 
     <param name="sdf_map/frame_width"  value="$(arg frame_width)" /> 
     <param name="sdf_map/frame_height" value="$(arg frame_height)" /> 
     <param name="sdf_map/map_size_x"   value="$(arg map_size_x_)" /> 
     <param name="sdf_map/map_size_y"   value="$(arg map_size_y_)" /> 
-    <param name="sdf_map/map_size_z"   value="$(arg map_size_z_)" /> 
-    <param name="sdf_map/obstacles_inflation" value="0.15" /> 
-    <param name="sdf_map/local_bound_inflate" value="0.5"/> <!-- Облась обработки 3д карты (update range) -->
-    <param name="sdf_map/local_map_margin"    value="25"/>  <!-- Размер esdf карты -->
+    <param name="sdf_map/map_size_z"   value="$(arg z_height)" /> 
+    <param name="sdf_map/obstacles_inflation" value="0.1" /> 
+    <param name="sdf_map/local_bound_inflate" value="$(arg local_box_inf)"/> <!-- Добавочное значение для увеличения update range (_ray_length) -->
+    <param name="sdf_map/local_map_margin"    value="$(arg local_box_inf)"/> <!-- Увеличение esdf карты относительно области обработки 3д карты (update range) -->
     <param name="sdf_map/ground_height"       value="0.3"/>
-    <param name="sdf_map/default_dist"        value="0"/> <!-- Расстояние до недостигнутого вокселя на sdf -->
+    <param name="sdf_map/default_dist"        value="0"/>   <!-- Расстояние до недостигнутого вокселя на sdf -->
 
     <param name="sdf_map/p_hit"  value="0.65"/>
     <param name="sdf_map/p_miss" value="0.43"/>
@@ -82,7 +66,7 @@
     <param name="sdf_map/p_max"  value="0.90"/>
     <param name="sdf_map/p_occ"  value="0.80"/>
     <param name="sdf_map/min_ray_length" value="0.3"/>
-    <param name="sdf_map/max_ray_length" value="$(arg depth_dist)"/>
+    <param name="sdf_map/max_ray_length" value="$(arg depth_dist)"/> <!-- Облась обработки 3д карты (update range) -->
     <param name="sdf_map/virtual_ceil_height"   value="$(arg z_height)"/>
     <param name="sdf_map/optimistic" value="true" type="bool"/>
     <param name="sdf_map/signed_dist" value="true" type="bool"/>
@@ -126,8 +110,8 @@
   <!-- topology path finding -->
     <param name="topo_prm/parallel_shortcut" value="false" type="bool"/>
     <param name="topo_prm/sample_inflate_x" value="1.5" type="double"/>
-    <param name="topo_prm/sample_inflate_y" value="3.5" type="double"/>
-    <param name="topo_prm/sample_inflate_z" value="0.5" type="double"/>
+    <param name="topo_prm/sample_inflate_y" value="2.0" type="double"/>
+    <param name="topo_prm/sample_inflate_z" value="0.8" type="double"/>
     <param name="topo_prm/max_sample_time" value="0.005" type="double"/>
     <param name="topo_prm/max_sample_num"  value="2000" type="int"/>
     <param name="topo_prm/clearance"       value="$(arg clearance)" type="double"/>
