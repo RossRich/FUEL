@@ -27,6 +27,7 @@ double traj_duration_;
 ros::Time start_time_;
 int traj_id_;
 int pub_traj_id_;
+bool is_visualization_on = false;
 
 shared_ptr<PerceptionUtils> percep_utils_;
 
@@ -47,8 +48,7 @@ Eigen::Vector3d T_loop;
 bool isLoopCorrection = false;
 
 double calcPathLength(const vector<Eigen::Vector3d> &path) {
-  if (path.empty())
-    return 0;
+  if (path.empty()) return 0;
   double len = 0.0;
   for (int i = 0; i < path.size() - 1; ++i) {
     len += (path[i + 1] - path[i]).norm();
@@ -57,6 +57,8 @@ double calcPathLength(const vector<Eigen::Vector3d> &path) {
 }
 
 void displayTrajWithColor(vector<Eigen::Vector3d> path, double resolution, Eigen::Vector4d color, int id) {
+  if (traj_pub.getNumSubscribers() == 0) return;
+
   visualization_msgs::Marker mk;
   mk.header.frame_id = "world";
   mk.header.stamp = ros::Time::now();
@@ -89,7 +91,7 @@ void displayTrajWithColor(vector<Eigen::Vector3d> path, double resolution, Eigen
 }
 
 void drawFOV(const vector<Eigen::Vector3d> &list1, const vector<Eigen::Vector3d> &list2) {
-  if (not cmd_vis_pub.getNumSubscribers()) return;
+  if (cmd_vis_pub.getNumSubscribers() == 0) return;
 
   visualization_msgs::Marker mk;
   mk.header.frame_id = "world";
@@ -113,8 +115,7 @@ void drawFOV(const vector<Eigen::Vector3d> &list1, const vector<Eigen::Vector3d>
   mk.action = visualization_msgs::Marker::DELETE;
   cmd_vis_pub.publish(mk);
 
-  if (list1.size() == 0)
-    return;
+  if (list1.size() == 0) return;
 
   // Pub new marker
   geometry_msgs::Point pt;
@@ -180,8 +181,7 @@ void newCallback(std_msgs::Empty msg) {
 }
 
 void odomCallbck(const nav_msgs::Odometry &msg) {
-  if (msg.child_frame_id == "X" || msg.child_frame_id == "O")
-    return;
+  if (msg.child_frame_id == "X" || msg.child_frame_id == "O") return;
   odom = msg;
   traj_real_.push_back(Eigen::Vector3d(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z));
 
@@ -207,7 +207,7 @@ void visCallback(const ros::TimerEvent &e) {
   // displayTrajWithColor(traj_cmd_, 0.05, Eigen::Vector4d(1, 0, 0, 1), pub_traj_id_);
   // displayTrajWithColor(traj_cmd_, 0.05, Eigen::Vector4d(0, 1, 0, 1), pub_traj_id_);
   displayTrajWithColor(traj_cmd_, 0.05, Eigen::Vector4d(0, 0, 1, 1), pub_traj_id_);
-  displayTrajWithColor(traj_real_, 0.03, Eigen::Vector4d(0.925, 0.054, 0.964, 1), 1);
+  displayTrajWithColor(traj_real_, 0.03, Eigen::Vector4d(0.925, 0.054, 0.964, 1), pub_traj_id_);
 }
 
 void bsplineCallback(const bspline::BsplineConstPtr &msg) {
@@ -258,8 +258,7 @@ void bsplineCallback(const bspline::BsplineConstPtr &msg) {
 
 void cmdCallback(const ros::TimerEvent &e) {
   // No publishing before receive traj data
-  if (!receive_traj_)
-    return;
+  if (!receive_traj_) return;
 
   ros::Time time_now = ros::Time::now();
   double t_cur = (time_now - start_time_).toSec();
@@ -286,10 +285,12 @@ void cmdCallback(const ros::TimerEvent &e) {
     yawdot = 0.0;
 
     // Report info of the whole flight
-    double len = calcPathLength(traj_cmd_);
-    double flight_t = (end_time - start_time).toSec();
-    ROS_WARN_THROTTLE(2, "flight time: %lf, path length: %lf, mean vel: %lf, energy is: % lf ", flight_t, len, len / flight_t,
-                      energy);
+    if (is_visualization_on) {
+      double len = calcPathLength(traj_cmd_);
+      double flight_t = (end_time - start_time).toSec();
+      ROS_WARN_THROTTLE(2, "flight time: %lf, path length: %lf, mean vel: %lf, energy is: % lf ", flight_t, len, len / flight_t,
+                        energy);
+    }
     receive_traj_ = false;
   } else {
     receive_traj_ = false;
@@ -327,28 +328,30 @@ void cmdCallback(const ros::TimerEvent &e) {
   // drawCmd(pos, vel, 0, Eigen::Vector4d(0, 1, 0, 1));
   // drawCmd(pos, acc, 1, Eigen::Vector4d(0, 0, 1, 1));
   // drawCmd(pos, pos_err, 3, Eigen::Vector4d(1, 1, 0, 0.7));
-  percep_utils_->setPose(pos, yaw);
-  vector<Eigen::Vector3d> l1, l2;
-  percep_utils_->getFOV(l1, l2);
-  drawFOV(l1, l2);
+  if (is_visualization_on) {
+    percep_utils_->setPose(pos, yaw);
+    vector<Eigen::Vector3d> l1, l2;
+    percep_utils_->getFOV(l1, l2);
+    drawFOV(l1, l2);
 
-  // Record info of the executed traj
-  if (traj_cmd_.size() == 0) {
-    // Add the first position
-    traj_cmd_.push_back(pos);
-  } else if ((pos - traj_cmd_.back()).norm() > 1e-2) {
-    // Add new different commanded position
-    traj_cmd_.push_back(pos);
-    double dt = (time_now - last_time).toSec();
-    energy += jer.squaredNorm() * dt;
-    end_time = ros::Time::now();
-  }
-  last_time = time_now;
+    // Record info of the executed traj
+    if (traj_cmd_.size() == 0) {
+      // Add the first position
+      traj_cmd_.push_back(pos);
+    } else if ((pos - traj_cmd_.back()).norm() > 1e-2) {
+      // Add new different commanded position
+      traj_cmd_.push_back(pos);
+      double dt = (time_now - last_time).toSec();
+      energy += jer.squaredNorm() * dt;
+      end_time = ros::Time::now();
+    }
+    last_time = time_now;
 
-  if (traj_cmd_.size() > 10000) {
-    // traj_cmd_.erase(traj_cmd_.begin(), traj_cmd_.begin() + 25000);
-    traj_cmd_.insert(traj_cmd_.begin(), traj_cmd_.begin() + 5000, traj_cmd_.end());
-    traj_cmd_.erase(traj_cmd_.begin() + 5000, traj_cmd_.end());
+    if (traj_cmd_.size() > 10000) {
+      // traj_cmd_.erase(traj_cmd_.begin(), traj_cmd_.begin() + 25000);
+      traj_cmd_.insert(traj_cmd_.begin(), traj_cmd_.begin() + 5000, traj_cmd_.end());
+      traj_cmd_.erase(traj_cmd_.begin() + 5000, traj_cmd_.end());
+    }
   }
 }
 
@@ -448,6 +451,16 @@ int main(int argc, char **argv) {
   ros::NodeHandle node;
   ros::NodeHandle nh("~");
 
+  nh.param("enable_viz", is_visualization_on, true);
+  nh.param("pub_traj_id", pub_traj_id_, -1);
+  nh.param("fsm/replan_time", replan_time_, 0.1);
+  nh.param("loop_correction/isLoopCorrection", isLoopCorrection, false);
+
+  Eigen::Vector3d init_pos;
+  nh.param("traj_server/init_x", init_pos[0], 0.0);
+  nh.param("traj_server/init_y", init_pos[1], 0.0);
+  nh.param("traj_server/init_z", init_pos[2], 0.0);
+
   ros::Subscriber bspline_sub = node.subscribe("planning/bspline", 10, bsplineCallback);
   ros::Subscriber replan_sub = node.subscribe("planning/replan", 10, replanCallback);
   ros::Subscriber new_sub = node.subscribe("planning/new", 10, newCallback);
@@ -459,16 +472,8 @@ int main(int argc, char **argv) {
   traj_pub = node.advertise<visualization_msgs::Marker>("planning/travel_traj", 10);
 
   ros::Timer cmd_timer = node.createTimer(ros::Duration(0.01), cmdCallback);
-  ros::Timer vis_timer = node.createTimer(ros::Duration(0.25), visCallback);
 
-  nh.param("traj_server/pub_traj_id", pub_traj_id_, -1);
-  nh.param("fsm/replan_time", replan_time_, 0.1);
-  nh.param("loop_correction/isLoopCorrection", isLoopCorrection, false);
-
-  Eigen::Vector3d init_pos;
-  nh.param("traj_server/init_x", init_pos[0], 0.0);
-  nh.param("traj_server/init_y", init_pos[1], 0.0);
-  nh.param("traj_server/init_z", init_pos[2], 0.0);
+  if (is_visualization_on) ros::Timer vis_timer = node.createTimer(ros::Duration(0.15), visCallback);
 
   ROS_WARN("[Traj server]: init...");
   ros::Duration(1.0).sleep();

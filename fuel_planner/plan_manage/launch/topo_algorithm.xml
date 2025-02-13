@@ -33,7 +33,9 @@
     <remap from="/planning/new"     to="planning/new"/>
     <remap from="/planning/bspline" to="planning/bspline"/>
     <remap from="/planning/wait"    to="planning/wait"/>
-    <remap from="/waypoint_generator/waypoints" to="~waypoints"/>
+    <remap from="/planning/stop"    to="planning/stop"/>
+    <remap from="/waypoint_generator/waypoint" to="planning/waypoint"/>
+    <remap from="/waypoint_generator/path" to="planning/path"/>
     
     <!-- replanning method -->
     <param name="planner_node/planner" value="2" type="int"/>
@@ -46,7 +48,6 @@
     <!-- не производить перепланирования если осталось thresh_no_replan метров до конца пути -->
     <param name="fsm/thresh_no_replan" value="1.0" type="double"/>
     <param name="fsm/enable_viz"       value="$(arg enable_viz)" type="bool"/>
-
 
     <param name="sdf_map/resolution"   value="0.1" /> 
     <param name="sdf_map/frame_width"  value="$(arg frame_width)" /> 

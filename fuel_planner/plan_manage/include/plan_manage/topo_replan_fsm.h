@@ -17,6 +17,7 @@
 #include <plan_env/edt_environment.h>
 #include <plan_env/obj_predictor.h>
 #include <plan_manage/planner_manager.h>
+#include <std_srvs/Trigger.h>
 #include <traj_utils/planning_visualization.h>
 
 using std::vector;
@@ -30,9 +31,9 @@ private:
   const char *_label = "[topo_fsm] ";
 
   /* ---------- flag ---------- */
-  enum FSM_EXEC_STATE { INIT, WAIT_TARGET, GEN_NEW_TRAJ, REPLAN_TRAJ, EXEC_TRAJ };
   enum TARGET_TYPE { MANUAL_TARGET = 1, PRESET_TARGET, REFENCE_PATH };
-  const std::string state_str[6] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_TRAJ", "REPLAN_NEW"};
+  enum FSM_EXEC_STATE { INIT, WAIT_TARGET, GEN_NEW_TRAJ, REPLAN_TRAJ, EXEC_TRAJ, STOP };
+  const std::string state_str[6] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_TRAJ", "STOP"};
   /* planning utils */
   FastPlannerManager::Ptr planner_manager_;
   PlanningVisualization::Ptr visualization_;
@@ -47,7 +48,8 @@ private:
   bool _enable_viz;
 
   /* planning data */
-  bool trigger_, have_target_, have_odom_, collide_;
+  bool have_target_, have_odom_, collide_;
+  bool _is_stop_req;
   FSM_EXEC_STATE exec_state_;
 
   Eigen::Vector3d odom_pos_, odom_vel_; // odometry state
@@ -60,21 +62,31 @@ private:
   /* ROS utils */
   ros::NodeHandle node_;
   ros::Timer exec_timer_, safety_timer_, vis_timer_, frontier_timer_;
-  ros::Subscriber waypoint_sub_, odom_sub_;
-  ros::Publisher replan_pub_, new_pub_, bspline_pub_;
+
+  ros::ServiceServer _stop_srv;
+
+  ros::Subscriber waypoint_sub_;
+  ros::Subscriber path_sub_;
+  ros::Subscriber odom_sub_;
+
   ros::Publisher _wait_goal_pub;
+  ros::Publisher new_pub_;
+  ros::Publisher bspline_pub_;
+  ros::Publisher replan_pub_;
 
   /* helper functions */
   bool callTopologicalTraj(PLAN_STEP step); // topo path guided gradient-based
-                                      // optimization; 1: new, 2: replan
+                                            // optimization; 1: new, 2: replan
   void changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call);
 
   /* ROS functions */
   void execFSMCallback(const ros::TimerEvent &e);
   void checkCollisionCallback(const ros::TimerEvent &e);
   void frontierCallback(const ros::TimerEvent &e);
-  void waypointCallback(const nav_msgs::PathConstPtr &msg);
+  void pathCallback(const nav_msgs::PathConstPtr &msg);
+  void waypointCallback(const geometry_msgs::PoseStampedPtr &);
   void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
+  bool stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res);
 
   /* visualize new trajectories */
   void visualization();
