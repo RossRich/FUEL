@@ -44,7 +44,7 @@ void Astar::setResolution(const double& res) {
   this->inv_resolution_ = 1.0 / resolution_;
 }
 
-int Astar::search(const Eigen::Vector3d& start_pt, const Eigen::Vector3d& end_pt) {
+Astar::RESULT Astar::search(const Eigen::Vector3d& start_pt, const Eigen::Vector3d& end_pt) {
   NodePtr cur_node = path_node_pool_[0];
   cur_node->parent = NULL;
   cur_node->position = start_pt;
@@ -185,7 +185,7 @@ void Astar::backtrack(const NodePtr& end_node, const Eigen::Vector3d& end) {
   reverse(path_nodes_.begin(), path_nodes_.end());
 }
 
-std::vector<Eigen::Vector3d> Astar::getPath() {
+const std::vector<Eigen::Vector3d>& Astar::getPath() {
   return path_nodes_;
 }
 

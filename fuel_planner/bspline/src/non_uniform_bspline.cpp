@@ -44,7 +44,7 @@ void NonUniformBspline::getTimeSpan(double& um, double& um_p) {
   um_p = u_(m_ - p_);
 }
 
-Eigen::MatrixXd NonUniformBspline::getControlPoint() {
+const Eigen::MatrixXd& NonUniformBspline::getControlPoint() {
   return control_points_;
 }
 

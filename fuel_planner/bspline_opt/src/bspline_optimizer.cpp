@@ -233,10 +233,10 @@ void BsplineOptimizer::optimize() {
       control_points_(i, j) = best_variable_[dim_ * i + j];
   if (optimize_time_) knot_span_ = best_variable_[variable_num_ - 1];
 
-  if (cost_function_ & MINTIME) {
-    ROS_DEBUG("%siter num: %i | dt: %2.2f | points: %i | comb time: %2.2f", 
+  // if (cost_function_ & MINTIME) {
+  ROS_DEBUG("%siter num: %i | w_time: %2.2f | points: %i | comb time: %2.2f", 
               _label, iter_num_, (ros::Time::now() - t1).toSec(), point_num_, comb_time);
-  }
+  // }
 
   // Deprecated
   // for (int i = order_; i < control_points_.rows(); ++i)

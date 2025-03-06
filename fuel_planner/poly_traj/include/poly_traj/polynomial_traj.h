@@ -90,14 +90,13 @@ public:
     return time_sum_;
   }
 
-  void getSamplePoints(vector<Eigen::Vector3d> &points) {
+  void getSamplePoints(vector<Eigen::Vector3d> &points, double resolution = 0.01) {
     double eval_t = 0.0;
     double total_t = getTotalTime();
     points.clear();
     while (eval_t < total_t) {
-      Eigen::Vector3d pt = evaluate(eval_t, 0);
-      points.push_back(pt);
-      eval_t += 0.01;
+      points.emplace_back(evaluate(eval_t, 0));
+      eval_t += resolution;
     }
     sample_points_ = points;
   }

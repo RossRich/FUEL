@@ -442,11 +442,12 @@ void MapROS::publishESDF() {
       dist = map_->getDistance(pos);
       dist = min(dist, max_dist);
       dist = max(dist, min_dist);
+      
       pt.x = pos(0);
       pt.y = pos(1);
       pt.z = -0.2;
       pt.intensity = (dist - min_dist) / (max_dist - min_dist);
-      cloud.push_back(pt);
+      cloud.emplace_back(pt);
     }
 
   cloud.width = cloud.points.size();
