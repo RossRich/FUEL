@@ -77,6 +77,9 @@ private:
   /* helper functions */
   bool callTopologicalTraj(PLAN_STEP step); // topo path guided gradient-based
                                             // optimization; 1: new, 2: replan
+
+  bool callPathPlanner(PLAN_STEP step);
+
   void changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call);
 
   /* ROS functions */

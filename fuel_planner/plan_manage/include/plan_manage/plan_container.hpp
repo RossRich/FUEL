@@ -12,8 +12,8 @@
 using std::vector;
 
 namespace fast_planner {
+
 class GlobalTrajData {
-private:
 public:
   PolynomialTraj global_traj_;
   vector<NonUniformBspline> local_traj_;
@@ -34,6 +34,12 @@ public:
    * @return true - если осталось меньше чем thresh_param (обе точки близки), иначе false
    */
   bool localTrajReachTarget(float thresh_param = 1e-3) { return fabs(local_end_time_ - global_duration_) < thresh_param; }
+
+  bool is_traj_end(float thresh_sec = 0.003) {
+    auto stamp_now = ros::Time::now();
+    auto stamp_end = global_start_time_ + ros::Duration(global_duration_);
+    return stamp_now > stamp_end or (stamp_end - stamp_now).toSec() < thresh_sec;
+  }
 
   void setGlobalTraj(const PolynomialTraj &traj, const ros::Time &time) {
     global_traj_ = traj;
@@ -60,7 +66,7 @@ public:
     last_time_inc_ = time_change;
   }
 
-  /*
+  /**
    * Магическая функция возвращает точку в простанстве по заданной временной метке
    * @param t Метка времени на траектории
    * @param k Тип траектории (позиция - 0, скорость - 1, ускорение - 2)
@@ -89,7 +95,7 @@ public:
   }
 
   /*
-   * Get data required to parameterize a Bspline within a sphere
+   * Расчитать параметры для создания сплайна заданной длинны
    * @param start_t Начальное время на глобальной траектории
    * @param radius Длинна отрезка для параметризации
    * @param dist_pt Расстояние между контрольными точками (bspline)

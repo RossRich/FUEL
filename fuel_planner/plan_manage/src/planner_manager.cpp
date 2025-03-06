@@ -47,9 +47,6 @@ void FastPlannerManager::initPlanModules(ros::NodeHandle &nh) {
 
   if (use_geometric_path) {
     path_finder_.reset(new Astar);
-    // path_finder_->setParam(nh);
-    // path_finder_->setEnvironment(edt_environment_);
-    // path_finder_->init();
     path_finder_->init(nh, edt_environment_);
   }
 
@@ -93,7 +90,7 @@ void FastPlannerManager::setGlobalWaypoints(vector<Eigen::Vector3d> &waypoints) 
 
 bool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d &start_pt, const Eigen::Vector3d &start_vel,
                                            const Eigen::Vector3d &start_acc, const Eigen::Vector3d &end_pt,
-                                           const Eigen::Vector3d &end_vel, const double &time_lb) {
+                                           const Eigen::Vector3d &end_vel, double time_lb) {
   std::cout << "[Kino replan]: start: " << start_pt.transpose() << ", " << start_vel.transpose() << ", " << start_acc.transpose()
             << ", goal:" << end_pt.transpose() << ", " << end_vel.transpose() << endl;
 
@@ -235,7 +232,7 @@ bool FastPlannerManager::kinodynamicReplan(const Eigen::Vector3d &start_pt, cons
 }
 
 void FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d> &tour, const Eigen::Vector3d &cur_vel,
-                                         const Eigen::Vector3d &cur_acc, const double &time_lb) {
+                                         const Eigen::Vector3d &cur_acc, double time_lb) {
   if (tour.empty()) ROS_ERROR("Empty path to traj planner");
 
   // Generate traj through waypoints-based method
@@ -289,7 +286,7 @@ void FastPlannerManager::planExploreTraj(const vector<Eigen::Vector3d> &tour, co
 // вынести time_now
 bool FastPlannerManager::planGlobalTraj(const Eigen::Vector3d &start_pos) {
   // Generate global reference trajectory
-  vector<Eigen::Vector3d> glob_pts = plan_data_.global_waypoints_;
+  auto &glob_pts = plan_data_.global_waypoints_;
   if (glob_pts.empty()) {
     ROS_ERROR_STREAM(_label << "No global waypoints");
     return false;
@@ -300,15 +297,16 @@ bool FastPlannerManager::planGlobalTraj(const Eigen::Vector3d &start_pos) {
 
   // Insert intermediate points if two waypoints are too far
   vector<Eigen::Vector3d> inter_points; //< ДУБЛИРУЕТ glob_pts
-  const double dist_thresh = 1.5;
+  const double &dist_thresh = pp_.ctrl_pt_dist;
   for (int i = 0; i < glob_pts.size() - 1; ++i) {
-    inter_points.push_back(glob_pts.at(i));
+    inter_points.emplace_back(glob_pts.at(i));
+    // double dist = (glob_pts.at(i + 1) - glob_pts.at(i)).squaredNorm();
     double dist = (glob_pts.at(i + 1) - glob_pts.at(i)).norm();
     if (dist > dist_thresh) {
       int id_num = floor(dist / dist_thresh) + 1;
       for (int j = 1; j < id_num; ++j) {
-        Eigen::Vector3d inter_pt = glob_pts.at(i) * (1.0 - double(j) / id_num) + glob_pts.at(i + 1) * double(j) / id_num;
-        inter_points.push_back(inter_pt);
+        inter_points.emplace_back();
+        inter_points.back() = std::move(glob_pts.at(i) * (1.0 - double(j) / id_num) + glob_pts.at(i + 1) * double(j) / id_num);
       }
     }
   }
@@ -331,30 +329,63 @@ bool FastPlannerManager::planGlobalTraj(const Eigen::Vector3d &start_pos) {
     time(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
 
   time(0) += pp_.max_vel_ / (2 * pp_.max_acc_);
-  time(time.rows() - 1) += pp_.max_vel_ / (2 * pp_.max_acc_);
+  time(time.rows() - 1) -= pp_.max_vel_ / (2 * pp_.max_acc_);
 
-  PolynomialTraj gl_traj;
+  auto &gl_traj = global_data_.global_traj_;
   PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, time, gl_traj);
-
-  auto time_now = ros::Time::now();
-  global_data_.setGlobalTraj(gl_traj, time_now);
+  global_data_.setGlobalTraj(gl_traj, ros::Time::now());
   ROS_DEBUG_STREAM(_label << "Global trajectory generated");
 
   return true;
 }
 
-// bool FastPlannerManager::planLocaTraj(const ros::Time &time_now) {
+bool FastPlannerManager::planGlobalTraj2(const point3d_t &start_pos) {
+  auto l1_dist = (plan_data_.global_waypoints_.back() - start_pos).lpNorm<1>();
+  ROS_DEBUG_STREAM(_label << "l1_dist: " << l1_dist);
+  bool res = false;
+  if (l1_dist > pp_.local_traj_len_) {
+    res = planGlobalTraj(start_pos);
+  } else {
+    auto astar_res = Astar::NO_PATH;
+    for (int i = 0; i < 3 and astar_res == Astar::NO_PATH; ++i) {
+      path_finder_->reset();
+      astar_res = path_finder_->search(start_pos, plan_data_.global_waypoints_.back());
+      ROS_WARN_COND(astar_res == Astar::NO_PATH, "%s[%i/3] Failed to search path.", _label, i + 1);
+    }
 
-// }
+    if (astar_res == Astar::NO_PATH) {
+      res = planGlobalTraj(start_pos);
+    } else {
+      const auto &path = path_finder_->getPath();
+      const int pt_num = path.size();
+      Eigen::MatrixXd pos(pt_num, 3);
+      for (int i = 0; i < pt_num; ++i)
+        pos.row(i) = path[i];
 
-bool FastPlannerManager::planLocaTraj(const double start_time, const ros::Time &time_now) {
+      Eigen::Vector3d zero(0, 0, 0);
+      Eigen::VectorXd times(pt_num - 1);
+      for (int i = 0; i < pt_num - 1; ++i)
+        times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
+
+      auto &gl_traj = global_data_.global_traj_;
+      PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, gl_traj);
+      global_data_.setGlobalTraj(gl_traj, ros::Time::now());
+      ROS_DEBUG_STREAM(_label << "Global trajectory generated");
+      res = true;
+    }
+  }
+
+  return res;
+}
+
+bool FastPlannerManager::planLocaTraj(double start_time, const ros::Time &time_now) {
   auto glob_end = global_data_.global_start_time_ + ros::Duration(global_data_.global_duration_);
   if (time_now > glob_end) {
     ROS_WARN_STREAM(_label << "Global trajectory end");
     return false;
   }
 
-  ROS_DEBUG_STREAM("*start_local: " << start_time);
+  ROS_DEBUG_STREAM(_label << "start_local: " << start_time);
   double points_traj_dt = 0;
   double local_traj_duration = 0;
   Eigen::MatrixXd ctrl_pts = paramLocalTraj(start_time, points_traj_dt, local_traj_duration);
@@ -363,6 +394,8 @@ bool FastPlannerManager::planLocaTraj(const double start_time, const ros::Time &
 
   local_data_.position_traj_ = bspline;
   local_data_.start_time_ = time_now;
+
+  // TODO: Избавиться от этой ХУЕТЫ
   updateTrajInfo(); //< 2 локальные траектории в global_data и local_data
   ROS_DEBUG("%sLocal traj: step %0.2fs | dur %0.2fs", _label, points_traj_dt, local_traj_duration);
   ROS_DEBUG_STREAM("*end_local: " << start_time + local_data_.duration_);
@@ -383,6 +416,117 @@ bool FastPlannerManager::topoReplanLocalTraj(const ros::Time &time_now, const bo
   updateTrajInfo();
   double local_traj_end = t_now + local_data_.duration_;
   global_data_.setLocalTraj(tmp_traj, t_now, local_traj_end, local_traj_td); //< нарушает принцип solid
+
+  return true;
+}
+
+bool FastPlannerManager::refine_local_traj(const ros::Time &time_now, bool is_collide) {
+  double t_now = (time_now - global_data_.global_start_time_).toSec();
+  auto &tmp_traj = local_data_.position_traj_;
+
+  refineTraj(tmp_traj);
+
+  double local_traj_td = local_data_.duration_ - tmp_traj.getTimeSum();
+  ROS_DEBUG_STREAM(_label << "Local traj dt: " << std::fixed << std::setprecision(3) << local_traj_td);
+
+  updateTrajInfo();
+  double local_traj_end = t_now + local_data_.duration_;
+  global_data_.setLocalTraj(tmp_traj, t_now, local_traj_end, local_traj_td); //< нарушает принцип solid
+
+  return true;
+}
+
+bool FastPlannerManager::replan_local_traj(const ros::Time &time_now, bool is_collide) {
+  ROS_DEBUG_STREAM(_label << "Replan traj");
+  double t_now = (time_now - global_data_.global_start_time_).toSec();
+  auto &best_traj = local_data_.position_traj_;
+
+  // const auto &start_pt = local_data_.start_pos_;
+  // auto &end_pt = local_data_.position_traj_.evaluateDeBoorT(local_data_.duration_);
+  // fixPointInCollision(end_pt);
+
+  // points3d_t points_set;
+  // points3d_t start_end_der;
+  // double dt = 0;
+  // double durations = 0;
+  // global_data_.getTrajInfoInSphere(t_now, pp_.local_traj_len_, pp_.ctrl_pt_dist, points_set, start_end_der, dt, durations);
+
+  // if (points_set.empty()) return false;
+
+  // path_finder_->reset();
+  // auto res = path_finder_->search(start_pt, end_pt);
+
+  // if (res == Astar::NO_PATH) {
+    // ROS_ERROR_STREAM(_label << "Failed to search path");
+    // return false;
+  // }
+
+  // const auto &path = path_finder_->getPath();
+  // const int pt_num = path.size();
+  // Eigen::MatrixXd pos(pt_num, 3);
+  // for (int i = 0; i < pt_num; ++i)
+    // pos.row(i) = path[i];
+
+  // Eigen::Vector3d zero(0, 0, 0);
+  // Eigen::VectorXd times(pt_num - 1);
+  // for (int i = 0; i < pt_num - 1; ++i)
+    // times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
+
+  // auto &gl_traj = global_data_.global_traj_;
+  // PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, gl_traj);
+  // global_data_.setGlobalTraj(gl_traj, ros::Time::now());
+  
+  // double dt = 0;
+
+
+  
+  
+  int cost_function = BsplineOptimizer::NORMAL_PHASE;
+  if (pp_.min_time_) cost_function |= BsplineOptimizer::MINTIME;
+
+  // Refine selected best traj
+  // Eigen::MatrixXd ctrl_pts = best_traj.getControlPoint();
+  double dt = best_traj.getKnotSpan();
+  vector<Eigen::Vector3d> start1, end1; //< позиция, скорость (до оптимизации)
+  
+  /* начало траектории (позиция, скорость) */
+  /* конец траектории (позиция) */
+  best_traj.getBoundaryStates(2, 2, start1, end1);
+  auto ctrl_pts = best_traj.getControlPoint();
+  bspline_optimizers_[1]->setBoundaryStates(start1, end1);
+  bspline_optimizers_[1]->optimize(ctrl_pts, dt, cost_function, 2, 2);
+  best_traj.setUniformBspline(ctrl_pts, pp_.bspline_degree_, dt);
+
+  vector<Eigen::Vector3d> start2, end2; //< позиция, скорость (после оптимизации)
+  best_traj.getBoundaryStates(2, 2, start2, end2);
+
+  /*
+   * x, y, z
+   * dif pos
+   * dif vel
+   * dif acc
+   */
+  const char title[][3] = {{'p', ':', '\0'}, {'v', ':', '\0'}, {'a', ':', '\0'}};
+  auto min_len = min(start1.size(), start2.size());
+  ROS_DEBUG_STREAM(_label << "start dif:");
+  for (size_t i = 0; i < min_len; ++i) {
+    auto dif_start = (start2[i] - start1[i]).norm();
+    ROS_DEBUG_STREAM(title[i] << std::fixed << std::setprecision(3) << dif_start);
+  }
+
+  ROS_DEBUG_STREAM(_label << "end dif:");
+  min_len = min(end1.size(), end2.size());
+  for (size_t i = 0; i < min_len; ++i) {
+    auto dif_enf = (end2[i] - end1[i]).norm();
+    ROS_DEBUG_STREAM(title[i] << std::fixed << std::setprecision(3) << dif_enf);
+  }
+
+  double local_traj_td = local_data_.duration_ - best_traj.getTimeSum();
+  ROS_DEBUG_STREAM(_label << "Local traj dt: " << std::fixed << std::setprecision(3) << local_traj_td);
+
+  updateTrajInfo();
+  double local_traj_end = t_now + local_data_.duration_;
+  global_data_.setLocalTraj(best_traj, t_now, local_traj_end, local_traj_td); //< нарушает принцип solid
 
   return true;
 }
@@ -464,91 +608,6 @@ bool FastPlannerManager::topoReplanTraj(NonUniformBspline &traj, const ros::Time
   return true;
 }
 
-
-bool FastPlannerManager::topoReplan(bool collide) {
-  ROS_DEBUG_STREAM(_label << "TOPOREPLAN. Collide_is: " << collide);
-  ros::Time t1, t2;
-
-  /* truncate a new local segment for replanning */
-  ros::Time time_now = ros::Time::now();
-  double t_now = (time_now - global_data_.global_start_time_).toSec();
-  double local_traj_dt, local_traj_duration;
-
-  Eigen::MatrixXd ctrl_pts = paramLocalTraj(t_now, local_traj_dt, local_traj_duration);
-  NonUniformBspline init_traj(ctrl_pts, pp_.bspline_degree_, local_traj_dt);
-  local_data_.start_time_ = time_now;
-  ROS_DEBUG("%sLocal traj: step %0.2fs | dur %0.2fs", _label, local_traj_dt, local_traj_duration);
-
-  if (!collide) {
-    // No collision detected, but we can further refine the trajectory
-    refineTraj(init_traj);
-    double time_change = init_traj.getTimeSum() - local_traj_duration;
-    local_data_.position_traj_ = init_traj;
-    global_data_.setLocalTraj(local_data_.position_traj_, t_now, local_traj_duration + time_change + t_now, time_change);
-    // local_data_.position_traj_ = init_traj;
-    // global_data_.setLocalTraj(init_traj, t_now, local_traj_duration + t_now, 0.0);
-  } else {
-    // Find topologically distinctive path and guide optimization in parallel
-    plan_data_.initial_local_segment_ = init_traj;
-    vector<Eigen::Vector3d> colli_start, colli_end, start_pts, end_pts;
-    findCollisionRange(colli_start, colli_end, start_pts, end_pts);
-
-    if (colli_start.size() == 1 && colli_end.size() == 0) {
-      ROS_WARN_STREAM(_label << "Init traj ends in obstacle, no replanning.");
-      local_data_.position_traj_ = init_traj;
-      global_data_.setLocalTraj(init_traj, t_now, local_traj_duration + t_now, 0.0);
-    } else {
-      // Call topological replanning when local segment is in collision
-      /* Search topological distinctive paths */
-      ROS_INFO("[Topo]: ---------");
-      plan_data_.clearTopoPaths();
-      list<GraphNode::Ptr> graph;
-      vector<vector<Eigen::Vector3d>> raw_paths, filtered_paths, select_paths;
-      topo_prm_->findTopoPaths(colli_start.front(), colli_end.back(), start_pts, end_pts, graph, raw_paths, filtered_paths,
-                               select_paths);
-
-      if (select_paths.size() == 0) {
-        ROS_WARN("No path.");
-        return false;
-      }
-      plan_data_.addTopoPaths(graph, raw_paths, filtered_paths, select_paths);
-
-      /* Optimize trajectory using different topo guiding paths */
-      ROS_INFO("[Optimize]: ---------");
-      t1 = ros::Time::now();
-
-      plan_data_.topo_traj_pos1_.resize(select_paths.size());
-      plan_data_.topo_traj_pos2_.resize(select_paths.size());
-      vector<thread> optimize_threads;
-      for (int i = 0; i < select_paths.size(); ++i) {
-        optimize_threads.emplace_back(&FastPlannerManager::optimizeTopoBspline, this, t_now, local_traj_duration, select_paths[i],
-                                      i);
-        // optimizeTopoBspline(t_now, local_traj_duration,
-        // select_paths[i], origin_len, i);
-      }
-      for (int i = 0; i < select_paths.size(); ++i)
-        optimize_threads[i].join();
-
-      double t_opt = (ros::Time::now() - t1).toSec();
-      cout << "[planner]: optimization time: " << t_opt << endl;
-
-      NonUniformBspline best_traj;
-      selectBestTraj(best_traj);
-      refineTraj(best_traj);
-      double time_change = best_traj.getTimeSum() - local_traj_duration;
-
-      local_data_.position_traj_ = best_traj;
-      global_data_.setLocalTraj(local_data_.position_traj_, t_now, local_traj_duration + time_change + t_now, time_change);
-    }
-  }
-  updateTrajInfo();
-
-  double tr = (ros::Time::now() - time_now).toSec();
-  ROS_WARN("Replan time: %lf", tr);
-
-  return true;
-}
-
 void FastPlannerManager::selectBestTraj(NonUniformBspline &traj) {
   // sort by jerk
   vector<NonUniformBspline> &trajs = plan_data_.topo_traj_pos2_;
@@ -584,30 +643,31 @@ void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
   best_traj.getBoundaryStates(2, 2, start1, end1);
 
   bspline_optimizers_[0]->setBoundaryStates(start1, end1);
-  bspline_optimizers_[0]->optimize(ctrl_pts, dt, cost_function, 2, 2);
+  bspline_optimizers_[0]->optimize(ctrl_pts, dt, cost_function, 1, 1);
   best_traj.setUniformBspline(ctrl_pts, pp_.bspline_degree_, dt);
 
   vector<Eigen::Vector3d> start2, end2; //< позиция, скорость (после оптимизации)
   best_traj.getBoundaryStates(2, 2, start2, end2);
 
   /*
-   *         x, y, z
+   * x, y, z
    * dif pos
    * dif vel
    * dif acc
    */
+  const char title[][3] = {{'p', ':', '\0'}, {'v', ':', '\0'}, {'a', ':', '\0'}};
   auto min_len = min(start1.size(), start2.size());
   ROS_DEBUG_STREAM(_label << "start dif:");
   for (size_t i = 0; i < min_len; ++i) {
-    auto dif_start = start2[i] - start1[i];
-    ROS_DEBUG_STREAM(std::fixed << std::setprecision(3) << dif_start.transpose().cwiseAbs());
+    auto dif_start = (start2[i] - start1[i]).norm();
+    ROS_DEBUG_STREAM(title[i] << std::fixed << std::setprecision(3) << dif_start);
   }
 
   ROS_DEBUG_STREAM(_label << "end dif:");
   min_len = min(end1.size(), end2.size());
   for (size_t i = 0; i < min_len; ++i) {
-    auto dif_enf = end2[i] - end1[i];
-    ROS_DEBUG_STREAM(std::fixed << std::setprecision(3) << dif_enf.transpose().cwiseAbs());
+    auto dif_enf = (end2[i] - end1[i]).norm();
+    ROS_DEBUG_STREAM(title[i] << std::fixed << std::setprecision(3) << dif_enf);
   }
 }
 
@@ -619,12 +679,6 @@ void FastPlannerManager::updateTrajInfo() {
   local_data_.duration_ = local_data_.position_traj_.getTimeSum();
 
   local_data_.traj_id_ += 1;
-}
-
-bool FastPlannerManager::findTopoPath() {
-  // do global
-  // do local
-  // opt
 }
 
 void FastPlannerManager::reparamBspline(NonUniformBspline &bspline, double ratio, Eigen::MatrixXd &ctrl_pts, double &dt,
@@ -800,6 +854,7 @@ void FastPlannerManager::findCollisionRange(vector<Eigen::Vector3d> &colli_start
   }
 }
 
+// TODO: Проверять локальную траекторию
 bool FastPlannerManager::checkTrajCollision(double &distance) {
   double t_now = (ros::Time::now() - local_data_.start_time_).toSec();
 
@@ -808,7 +863,7 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
   Eigen::Vector3d fut_pt;
   double fut_t = 0.02;
 
-  // while (radius < 6.0 && t_now + fut_t < local_data_.duration_) {
+  // while (radius < pp_.local_traj_len_ && t_now + fut_t < local_data_.duration_) {
   while (t_now + fut_t < local_data_.duration_) {
     fut_pt = local_data_.position_traj_.evaluateDeBoorT(t_now + fut_t);
     // double dist = edt_environment_->sdf_map_->getDistance(fut_pt);
@@ -821,7 +876,7 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
     if (sdf_map_->getInflateOccupancy(fut_pt) == 1) {
       // distance = radius;
       distance = (fut_pt - cur_pt).norm();
-      ROS_WARN_STREAM(_label << "Collision at  " << fut_pt.transpose());
+      ROS_WARN_STREAM(_label << "Collision at  " << fut_pt.transpose().format(vector3d_fmt));
       return false;
     }
     // radius = (fut_pt - cur_pt).norm();
@@ -833,12 +888,12 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
 
 bool FastPlannerManager::fixPointInCollision(Eigen::Vector3d &point) {
   // try to find a max distance goal around
-  bool new_goal = false;
+  // bool new_goal = false;
   const double dr = 0.25, dtheta = 30, dz = 0.3;
   double dist = 0;
-  double max_dist = 0.8;
-  double &local_traj_duration = local_data_.duration_; //< ??
-  Eigen::Vector3d goal;
+  double max_dist = pp_.clearance_;
+  double local_traj_duration = local_data_.duration_; //< ??
+  // Eigen::Vector3d goal = point;
   Eigen::Vector3d tmp_pt;
 
   for (double r = dr; r <= 5 * dr + 1e-3; r += dr) {
