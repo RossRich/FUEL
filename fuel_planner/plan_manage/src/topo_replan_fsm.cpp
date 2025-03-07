@@ -18,6 +18,8 @@ void TopoReplanFSM::init(ros::NodeHandle &nh) {
   nh.param("fsm/act_map", act_map_, false);
   nh.param("fsm/enable_viz", _enable_viz, false);
 
+  _emergency_stop_dist = 1.2;
+
   /* initialize main modules */
   planner_manager_.reset(new FastPlannerManager);
   planner_manager_->initPlanModules(nh);
@@ -210,8 +212,8 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
       have_target_ = false;
       changeFSMExecState(FSM_EXEC_STATE::WAIT_TARGET, "FSM");
     } else if (pm.global_data_.local_end_time_ < pm.global_data_.global_duration_) {
-      // ROS_DEBUG("%s[%u]Replan: periodic call", _label, _replan_num);
-      // changeFSMExecState(REPLAN_TRAJ, "FSM");
+      ROS_DEBUG("%s[%u]Replan: periodic call", _label, _replan_num);
+      changeFSMExecState(REPLAN_TRAJ, "FSM");
     }
 
     break;
@@ -223,8 +225,12 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
     ros::Time time_now = ros::Time::now();
     double t_cur = (time_now - local_traj.start_time_).toSec();
 
-    start_pt_ = local_traj.position_traj_.evaluateDeBoorT(t_cur);
-    start_vel_ = local_traj.velocity_traj_.evaluateDeBoorT(t_cur);
+    // start_pt_ = local_traj.position_traj_.evaluateDeBoorT(t_cur);
+    // start_vel_ = local_traj.velocity_traj_.evaluateDeBoorT(t_cur);
+    // start_acc_ = local_traj.acceleration_traj_.evaluateDeBoorT(t_cur);
+
+    start_pt_ = odom_pos_;
+    start_vel_ = odom_vel_;
     start_acc_ = local_traj.acceleration_traj_.evaluateDeBoorT(t_cur);
 
     start_yaw_(0) = local_traj.yaw_traj_.evaluateDeBoorT(t_cur)[0];
@@ -322,8 +328,7 @@ void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
     collide_ = not planner_manager_->checkTrajCollision(dist); //< функция возвращает false если есть препядствие.
     if (collide_) {
       ROS_WARN("%sCurrent traj %0.2f m to collision", _label, dist);
-      const double collision_dist_tresh = 1.0; //< Продолжать лететь если расстояние до препядствия больше чем
-      if (dist < collision_dist_tresh) {
+      if (dist < _emergency_stop_dist) {
         changeFSMExecState(STOP, "SAFETY");
         ROS_ERROR_STREAM(_label << "Stop. Collision detected");
       } else {
@@ -464,7 +469,7 @@ void TopoReplanFSM::visualization() {
   MidPlanData &plan_data = planner_manager_->plan_data_;
   LocalTrajData *local_traj = &planner_manager_->local_data_;
 
-  visualization_->drawPolynomialTraj(global_data.global_traj_, 0.05, Eigen::Vector4d(0, 1, 0.5, .5));
+  visualization_->drawPolynomialTraj(global_data.global_traj_, 0.05, Eigen::Vector4d(0, 1, 0.5, .8));
   visualization_->drawBspline(local_traj->position_traj_, 0.05, Eigen::Vector4d(1, 0.5, 0.0, 1), true, 0.1,
                               Eigen::Vector4d(1, 0.05, 0.05, 1));
 
