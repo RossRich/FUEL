@@ -334,7 +334,7 @@ void PlanningVisualization::drawBspline(NonUniformBspline &bspline, double size,
   double tm, tmp;
   bspline.getTimeSpan(tm, tmp);
 
-  for (double t = tm; t <= tmp; t += 0.01) {
+  for (double t = tm; t <= tmp; t += 0.1) {
     traj_pts.push_back(bspline.evaluateDeBoor(t));
   }
 
@@ -448,7 +448,7 @@ void PlanningVisualization::drawGeometricPath(const vector<Eigen::Vector3d> &pat
 
 void PlanningVisualization::drawPolynomialTraj(PolynomialTraj poly_traj, double resolution, const Eigen::Vector4d &color, int id) {
   vector<Eigen::Vector3d> poly_pts;
-  poly_traj.getSamplePoints(poly_pts);
+  poly_traj.getSamplePoints(poly_pts, 0.1);
   drawSpheres(poly_pts, resolution, color, "PolyTraj", POLY_TRAJ + id % 100, ROS_PUBLISHER::GLOBAL_TRAJECTORY);
 }
 

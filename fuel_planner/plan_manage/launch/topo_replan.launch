@@ -18,7 +18,7 @@
   <arg name="fx" default="282.229248046875"/>
   <arg name="fy" default="282.229248046875"/>
 
-  <arg name="max_vel" default="0.6"/>
+  <arg name="max_vel" default="1.0"/>
   <arg name="max_acc" default="2.0"/>
 
   <arg name="waypoints_dist" default="3.0"/>
