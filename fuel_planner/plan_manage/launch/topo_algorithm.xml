@@ -15,7 +15,7 @@
   <arg name="max_vel"/>
   <arg name="max_acc"/>
   <arg name="flight_type"/>
-  <arg name="clearance"    default="0.5"/>
+  <arg name="clearance"    default="0.8"/>
   <arg name="z_height"     default="$(eval arg('map_size_z_') + arg('clearance'))"/>
   <arg name="log_output"   default="screen"/>
   <arg name="enable_viz"   default="true"/>
@@ -128,7 +128,7 @@
     <param name="optimization/ld_dist" value="20.0" type="double"/>
     <param name="optimization/ld_feasi" value="2.0" type="double"/>
     <param name="optimization/ld_start" value="10.0" type="double"/>
-    <param name="optimization/ld_end" value="1.0" type="double"/>
+    <param name="optimization/ld_end" value="3.0" type="double"/>
     <param name="optimization/ld_guide" value="2" type="double"/>
     <param name="optimization/ld_waypt" value="5.0" type="double"/>
     <param name="optimization/ld_view" value="0.0" type="double"/>

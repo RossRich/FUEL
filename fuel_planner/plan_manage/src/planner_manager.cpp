@@ -850,7 +850,7 @@ void FastPlannerManager::findCollisionRange(vector<Eigen::Vector3d> &colli_start
 
 // TODO: Проверять локальную траекторию
 bool FastPlannerManager::checkTrajCollision(double &distance) {
-  double t_now = (ros::Time::now() - local_data_.start_time_).toSec() + 0.1;
+  double t_now = (ros::Time::now() - local_data_.start_time_).toSec();
   Eigen::Vector3d cur_pt = local_data_.position_traj_.evaluateDeBoorT(t_now);
   Eigen::Vector3d fut_pt;
   bool res = true;

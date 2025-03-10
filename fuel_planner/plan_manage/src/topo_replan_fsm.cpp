@@ -200,10 +200,7 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
   case EXEC_TRAJ: {
     auto &pm = *planner_manager_;
     auto &global_data = pm.global_data_;
-    // auto &local_traj = pm.local_data_;
     auto time_now = ros::Time::now();
-
-    // double cur_time_pos = (time_now - global_data.global_start_time_).toSec();
 
     if (_is_stop_req) {
       // запрос на остановку движения
@@ -211,9 +208,15 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
     } else if (global_data.is_traj_end()) {
       have_target_ = false;
       changeFSMExecState(FSM_EXEC_STATE::WAIT_TARGET, "FSM");
-    } else if (pm.global_data_.local_end_time_ < pm.global_data_.global_duration_) {
-      ROS_DEBUG("%s[%u]Replan: periodic call", _label, _replan_num);
-      changeFSMExecState(REPLAN_TRAJ, "FSM");
+    } else {
+      // глобальная длиннее локальной
+      bool is_glob_long = pm.global_data_.local_end_time_ < pm.global_data_.global_duration_;
+      // прошел часть пути по локальной
+      bool is_motion_start = (time_now - pm.local_data_.start_time_).toSec() > pm.local_data_.duration_ / 2.0;
+      if (is_glob_long and is_motion_start) {
+        ROS_DEBUG("%s[%u] Replan", _label, _replan_num);
+        changeFSMExecState(REPLAN_TRAJ, "FSM");
+      }
     }
 
     break;
@@ -351,7 +354,7 @@ bool TopoReplanFSM::callPathPlanner(PLAN_STEP step) {
   if (not pm.planLocaTraj(local_traj_start, time_now)) return false;
 
   if (not pm.refine_local_traj(time_now, collide_)) return false;
- 
+
   auto &local_traj = pm.local_data_;
 
   if (!act_map_) {
