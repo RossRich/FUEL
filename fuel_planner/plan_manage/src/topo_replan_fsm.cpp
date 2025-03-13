@@ -189,6 +189,7 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
       ROS_WARN("%sPlanning failed. Retrying... [%u/%u]", _label, failed_num, _raplan_max_failed);
       if (failed_num > _raplan_max_failed) {
         failed_num = 0;
+        have_target_ = false;
         changeFSMExecState(WAIT_TARGET, "FSM");
       } else
         ros::Duration(0.25).sleep();
@@ -263,72 +264,10 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
 }
 
 void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
-
-  /* ---------- check goal safety ---------- */
-  // if (have_target_)
-  /* if (false) {
-    LocalTrajData &local_traj = planner_manager_->local_data_;
-    auto edt_env = planner_manager_->edt_environment_;
-
-    double dist = planner_manager_->pp_.dynamic_
-                      ? edt_env->evaluateCoarseEDT(target_point_, local_traj.duration_)
-                      : edt_env->evaluateCoarseEDT(target_point_, -1.0);
-
-    if (dist <= 0.3) {
-      //try to find a max distance goal around
-      bool new_goal = false;
-      const double dr = 0.5, dtheta = 30, dz = 0.3;
-
-      double new_x, new_y, new_z, max_dist = -1.0;
-      Eigen::Vector3d goal;
-
-      for (double r = dr; r <= 5 * dr + 1e-3; r += dr) {
-        for (double theta = -90; theta <= 270; theta += dtheta) {
-          for (double nz = 1 * dz; nz >= -1 * dz; nz -= dz) {
-            new_x = target_point_(0) + r * cos(theta / 57.3);
-            new_y = target_point_(1) + r * sin(theta / 57.3);
-            new_z = target_point_(2) + nz;
-            Eigen::Vector3d new_pt(new_x, new_y, new_z);
-
-            dist = planner_manager_->pp_.dynamic_ ? edt_env->evaluateCoarseEDT(new_pt, local_traj.duration_)
-                                                  : edt_env->evaluateCoarseEDT(new_pt, -1.0);
-
-            if (dist > max_dist) {
-              //reset target_point_
-              goal(0) = new_x;
-              goal(1) = new_y;
-              goal(2) = new_z;
-              max_dist = dist;
-            }
-          }
-        }
-      }
-
-      if (max_dist > 0.3) {
-        cout << "change goal, replan." << endl;
-        target_point_ = goal;
-        have_target_ = true;
-        end_vel_.setZero();
-
-        if (exec_state_ == EXEC_TRAJ) {
-          changeFSMExecState(REPLAN_NEW, "SAFETY");
-        }
-
-        visualization_->drawGoal(target_point_, 0.3, Eigen::Vector4d(1, 0, 0, 1.0));
-      } else {
-        // have_target_ = false;
-        // cout << "Goal near collision, stop." << endl;
-        // changeFSMExecState(WAIT_TARGET, "SAFETY");
-        cout << "goal near collision, keep retry" << endl;
-        changeFSMExecState(REPLAN_TRAJ, "FSM");
-      }
-    }
-  } */
-
   /* ---------- check trajectory ---------- */
   if (exec_state_ == EXEC_TRAJ) {
     double dist;
-    collide_ = not planner_manager_->checkTrajCollision(dist); //< функция возвращает false если есть препядствие.
+    collide_ = not planner_manager_->checkTrajCollision(dist);
     if (collide_) {
       ROS_WARN("%sCurrent traj %0.2f m to collision", _label, dist);
       if (dist < _emergency_stop_dist) {
@@ -346,34 +285,36 @@ bool TopoReplanFSM::callPathPlanner(PLAN_STEP step) {
   auto &glob_data = pm.global_data_;
 
   if (step == PLAN_STEP::FULL)
-    if (not pm.planGlobalTraj2(start_pt_)) return false;
+    if (not pm.planGlobalTraj3(start_pt_, odom_orient_)) return false;
 
   auto time_now = ros::Time::now();
   double local_traj_start = (time_now - glob_data.global_start_time_).toSec(); //< начало локальной траектории на глобальной
 
   if (not pm.planLocaTraj(local_traj_start, time_now)) return false;
 
-  if (not pm.refine_local_traj(time_now, collide_)) return false;
-
-  auto &local_traj = pm.local_data_;
+  pm.refine_local_traj(time_now, collide_);
 
   if (!act_map_) {
-    // Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
-    // planner_manager_->planYawExplore(start_yaw_, start_yaw_[0], false, 1);
     pm.planYaw(start_yaw_);
   } else {
     pm.planYawActMap(start_yaw_);
   }
 
+  double dist = 0.0;
+  if (step == PLAN_STEP::FULL and not pm.checkTrajCollision(dist) and dist < _emergency_stop_dist) {
+    return false;
+  }
+
+  auto &local_traj_data = pm.local_data_;
   /* publish newest trajectory to server */
 
   /* publish traj */
   bspline::Bspline bspline;
   bspline.order = planner_manager_->pp_.bspline_degree_;
-  bspline.start_time = local_traj.start_time_;
-  bspline.traj_id = local_traj.traj_id_;
+  bspline.start_time = local_traj_data.start_time_;
+  bspline.traj_id = local_traj_data.traj_id_;
 
-  Eigen::MatrixXd pos_pts = local_traj.position_traj_.getControlPoint();
+  Eigen::MatrixXd pos_pts = local_traj_data.position_traj_.getControlPoint();
 
   for (int i = 0; i < pos_pts.rows(); ++i) {
     geometry_msgs::Point pt;
@@ -383,17 +324,17 @@ bool TopoReplanFSM::callPathPlanner(PLAN_STEP step) {
     bspline.pos_pts.push_back(pt);
   }
 
-  Eigen::VectorXd knots = local_traj.position_traj_.getKnot();
+  Eigen::VectorXd knots = local_traj_data.position_traj_.getKnot();
   for (int i = 0; i < knots.rows(); ++i) {
     bspline.knots.push_back(knots(i));
   }
 
-  Eigen::MatrixXd yaw_pts = local_traj.yaw_traj_.getControlPoint();
+  Eigen::MatrixXd yaw_pts = local_traj_data.yaw_traj_.getControlPoint();
   for (int i = 0; i < yaw_pts.rows(); ++i) {
     double yaw = yaw_pts(i, 0);
     bspline.yaw_pts.push_back(yaw);
   }
-  bspline.yaw_dt = local_traj.yaw_traj_.getKnotSpan();
+  bspline.yaw_dt = local_traj_data.yaw_traj_.getKnotSpan();
   bspline_pub_.publish(bspline);
 
   if (_enable_viz) visualization();
@@ -472,16 +413,16 @@ void TopoReplanFSM::visualization() {
   MidPlanData &plan_data = planner_manager_->plan_data_;
   LocalTrajData *local_traj = &planner_manager_->local_data_;
 
-  visualization_->drawPolynomialTraj(global_data.global_traj_, 0.05, Eigen::Vector4d(0, 1, 0.5, .8));
-  visualization_->drawBspline(local_traj->position_traj_, 0.05, Eigen::Vector4d(1, 0.5, 0.0, 1), true, 0.1,
-                              Eigen::Vector4d(1, 0.05, 0.05, 1));
+  const auto poli_traj_color = Eigen::Vector4d(255 / 255.0, 0 / 255.0, 0 / 255.0, 1.0);
+  const auto spline_traj_color = Eigen::Vector4d(77 / 255.0, 77 / 255.0, 169 / 255.0, 1);
+  const auto ctrl_pt_color = Eigen::Vector4d(49 / 255.0, 80 / 255.0, 119 / 255.0, 1);
 
-  auto color1 = Eigen::Vector4d(210, 0, 98, 255);
-  auto color2 = Eigen::Vector4d(214, 88, 159, 255);
-  auto color3 = Eigen::Vector4d(196, 228, 255, 255);
-  color1 /= 255.0;
-  color2 /= 255.0;
-  color3 /= 255.0;
+  visualization_->drawPolynomialTraj(global_data.global_traj_, 0.05, poli_traj_color);
+  visualization_->drawBspline(local_traj->position_traj_, 0.05, spline_traj_color, true, 0.1, ctrl_pt_color);
+
+  const auto color1 = Eigen::Vector4d(210 / 255.0, 0 / 255.0, 98 / 255.0, 1);
+  const auto color2 = Eigen::Vector4d(214 / 255.0, 88 / 255.0, 159 / 255.0, 1);
+  const auto color3 = Eigen::Vector4d(196 / 255.0, 228 / 255.0, 255 / 255.0, 1);
 
   visualization_->drawTopoGraph(plan_data.topo_graph_, 0.08, 0.05, color1, color2, color3);
 
