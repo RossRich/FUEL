@@ -38,6 +38,16 @@ public:
                          const Eigen::Vector3d &end_pt, const Eigen::Vector3d &end_vel, double time_lb = -1);
 
   /**
+   * Создать траекторию по заданным точкам. 
+   * Замедление (увеличение времени) в начальной и в конечной точках.
+   *
+   * @param points_traj набор контрольных точек
+   * @param [out] poli_traj полиномиальная траектория
+   * @return true если успех
+   */
+  bool create_flat_poli_traj(const points3d_t &points_traj, PolynomialTraj &poli_traj);
+
+  /**
    * Построить траекторию по точкам
    * @warning необходимо 3 точки
    * @param tour вектор контрольных точек (не менее 3х)

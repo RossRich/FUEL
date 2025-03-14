@@ -380,185 +380,91 @@ bool FastPlannerManager::planGlobalTraj2(const point3d_t &start_pos) {
   return res;
 }
 
+bool FastPlannerManager::create_flat_poli_traj(const points3d_t &points_traj, PolynomialTraj &poli_traj) {
+  size_t pts_num = points_traj.size();
+  if (pts_num < 2) return false;
+
+  Eigen::MatrixXd pos(pts_num, 3);
+  for (size_t i = 0; i < pts_num; ++i)
+    pos.row(i) = points_traj[i];
+
+  Eigen::Vector3d zero(0, 0, 0);
+  Eigen::VectorXd times(pts_num - 1);
+  for (int i = 0; i < pts_num - 1; ++i)
+    times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
+
+  // < замедление в начале и в конце
+  times(0) += pp_.max_vel_ / (2 * pp_.max_acc_);
+  times(times.rows() - 1) += pp_.max_vel_ / (2 * pp_.max_acc_);
+
+  PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, poli_traj);
+
+  return true;
+}
+
 bool FastPlannerManager::planGlobalTraj3(const point3d_t &start_pos, const Eigen::Quaterniond &orientation) {
-  const auto &end_pt = plan_data_.global_waypoints_.back();
+  const point3d_t &end_pt = plan_data_.global_waypoints_.back();
   auto l1_dist = (end_pt - start_pos).lpNorm<1>();
-  bool res = false;
 
+  point3d_t _pt = end_pt;
   if (l1_dist > pp_.local_traj_len_) {
-    ROS_DEBUG_STREAM(_label << "Long path");
-    vector3d_t star_end_dir = (end_pt - start_pos).normalized();
-    point3d_t seg_end_pt = start_pos + (star_end_dir * pp_.local_traj_len_);
-    if (sdf_map_->getInflateOccupancy(seg_end_pt) == 1) fixPointInCollision2(orientation, seg_end_pt);
-    _visualisation->drawGoal(seg_end_pt, 0.3, {.5, .5, .5, 1.0}, 200);
-
-    path_finder_->reset();
-    Astar::RESULT _pf_res = path_finder_->search(start_pos, seg_end_pt);
-    if (_pf_res == Astar::NO_PATH) {
-      ROS_DEBUG_STREAM(_label << "Failed to find path");
-      // res = planGlobalTraj(start_pos);
-      points3d_t g_pts;
-      g_pts.emplace_back(start_pos);
-      point3d_t _pt = g_pts.back();
-      int num_seg = floor((_pt - end_pt).norm() / pp_.ctrl_pt_dist);
-      if (num_seg > 0) {
-        vector3d_t step = (end_pt - _pt).normalized() * pp_.ctrl_pt_dist;
-        for (size_t i = 0; i < num_seg; ++i) {
-          _pt = _pt + step;
-          g_pts.emplace_back(_pt);
-        }
-      }
-
-      g_pts.emplace_back(end_pt);
-
-      if (g_pts.size() == 2) {
-        g_pts.insert(g_pts.begin(), (start_pos + end_pt) * 0.5);
-      }
-
-      for (auto &pt : g_pts) {
-        if (sdf_map_->getInflateOccupancy(pt) == 1) fixPointInCollision2(orientation, pt);
-      }
-
-      uint pt_num = g_pts.size();
-      Eigen::MatrixXd pos(pt_num, 3);
-      for (int i = 0; i < pt_num; ++i)
-        pos.row(i) = g_pts[i];
-
-      Eigen::Vector3d zero(0, 0, 0);
-      Eigen::VectorXd times(pt_num - 1);
-      for (int i = 0; i < pt_num - 1; ++i)
-        times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
-
-      times(0) += pp_.max_vel_ / (2 * pp_.max_acc_);
-      times(times.rows() - 1) += pp_.max_vel_ / (2 * pp_.max_acc_);
-
-      auto &gl_traj = global_data_.global_traj_;
-      PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, gl_traj);
-      global_data_.setGlobalTraj(gl_traj, ros::Time::now());
-      ROS_DEBUG_STREAM(_label << "Global trajectory generated");
-      res = true;
-    } else {
-      ROS_DEBUG_STREAM(_label << "Path found");
-      const auto &astart_path = path_finder_->getPath();
-      points3d_t sparse_path;
-      sparse_path.emplace_back(start_pos);
-      for (size_t i = 0; i < astart_path.size(); ++i) {
-        const auto &_pt = astart_path.at(i);
-        if ((_pt - sparse_path.back()).norm() > pp_.ctrl_pt_dist) sparse_path.emplace_back(_pt);
-      }
-
-      point3d_t _pt = sparse_path.back();
-      int num_seg = floor((_pt - end_pt).norm() / pp_.ctrl_pt_dist);
-
-      if (num_seg > 0) {
-        vector3d_t step = (end_pt - _pt).normalized() * pp_.ctrl_pt_dist;
-        for (size_t i = 0; i < num_seg; ++i) {
-          _pt = _pt + step;
-          sparse_path.emplace_back(_pt);
-        }
-      }
-
-      sparse_path.emplace_back(end_pt);
-
-      uint pt_num = sparse_path.size();
-      Eigen::MatrixXd pos(pt_num, 3);
-      for (int i = 0; i < pt_num; ++i)
-        pos.row(i) = sparse_path[i];
-
-      Eigen::Vector3d zero(0, 0, 0);
-      Eigen::VectorXd times(pt_num - 1);
-      for (int i = 0; i < pt_num - 1; ++i)
-        times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
-
-      times(0) += pp_.max_vel_ / (2 * pp_.max_acc_);
-      times(times.rows() - 1) += pp_.max_vel_ / (2 * pp_.max_acc_);
-
-      auto &gl_traj = global_data_.global_traj_;
-      PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, gl_traj);
-      global_data_.setGlobalTraj(gl_traj, ros::Time::now());
-      ROS_DEBUG_STREAM(_label << "Global trajectory generated");
-      res = true;
-    }
-
-  } else {
-    ROS_DEBUG_STREAM(_label << "Short path");
-    auto astar_res = Astar::NO_PATH;
-    for (int i = 0; i < 3 and astar_res == Astar::NO_PATH; ++i) {
-      path_finder_->reset();
-      astar_res = path_finder_->search(start_pos, plan_data_.global_waypoints_.back());
-      ROS_WARN_COND(astar_res == Astar::NO_PATH, "%s[%i/3] Failed to search path.", _label, i + 1);
-    }
-
-    if (astar_res == Astar::NO_PATH) {
-      // res = planGlobalTraj(start_pos);
-      ROS_DEBUG_STREAM(_label << "Failed to find path");
-      points3d_t g_pts;
-      g_pts.emplace_back(start_pos);
-      point3d_t _pt = g_pts.back();
-      int num_seg = floor((_pt - end_pt).norm() / pp_.ctrl_pt_dist);
-      if (num_seg > 0) {
-        vector3d_t step = (end_pt - _pt).normalized() * pp_.ctrl_pt_dist;
-        for (size_t i = 0; i < num_seg; ++i) {
-          _pt = _pt + step;
-          g_pts.emplace_back(_pt);
-        }
-      }
-
-      g_pts.emplace_back(end_pt);
-
-      if (g_pts.size() == 2) {
-        g_pts.insert(g_pts.begin(), (start_pos + end_pt) * 0.5);
-      }
-
-      for (auto &pt : g_pts) {
-        if (sdf_map_->getInflateOccupancy(pt) == 1) fixPointInCollision2(orientation, pt);
-      }
-
-      uint pt_num = g_pts.size();
-      Eigen::MatrixXd pos(pt_num, 3);
-      for (int i = 0; i < pt_num; ++i)
-        pos.row(i) = g_pts[i];
-
-      Eigen::Vector3d zero(0, 0, 0);
-      Eigen::VectorXd times(pt_num - 1);
-      for (int i = 0; i < pt_num - 1; ++i)
-        times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
-
-      times(0) += pp_.max_vel_ / (2 * pp_.max_acc_);
-      times(times.rows() - 1) += pp_.max_vel_ / (2 * pp_.max_acc_);
-
-      auto &gl_traj = global_data_.global_traj_;
-      PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, gl_traj);
-      global_data_.setGlobalTraj(gl_traj, ros::Time::now());
-      ROS_DEBUG_STREAM(_label << "Global trajectory generated");
-      res = true;
-
-    } else {
-      const auto &path = path_finder_->getPath();
-      const int pt_num = path.size();
-
-      Eigen::MatrixXd pos(pt_num, 3);
-      for (int i = 0; i < pt_num; ++i)
-        pos.row(i) = path[i];
-
-      Eigen::Vector3d zero(0, 0, 0);
-      Eigen::VectorXd times(pt_num - 1);
-      for (int i = 0; i < pt_num - 1; ++i)
-        times(i) = (pos.row(i + 1) - pos.row(i)).norm() / (pp_.max_vel_ * 0.5);
-
-      times(0) += pp_.max_vel_ / (2 * pp_.max_acc_);
-      times(times.rows() - 1) += pp_.max_vel_ / (2 * pp_.max_acc_);
-
-      auto &gl_traj = global_data_.global_traj_;
-      PolynomialTraj::waypointsTraj(pos, zero, zero, zero, zero, times, gl_traj);
-      global_data_.setGlobalTraj(gl_traj, ros::Time::now());
-      ROS_DEBUG_STREAM(_label << "Global trajectory generated");
-      res = true;
-    }
+    ROS_DEBUG_STREAM(_label << "Split path");
+    _pt = start_pos + ((end_pt - start_pos).normalized() * pp_.local_traj_len_);
+    if (sdf_map_->getInflateOccupancy(_pt) == 1)
+      if (not fixPointInCollision2(orientation, _pt)) fixPointInCollision(_pt);
   }
 
-  return res;
-}
+  auto astar_res = Astar::NO_PATH;
+  for (int i = 0; i < 3 and astar_res == Astar::NO_PATH; ++i) {
+    path_finder_->reset();
+    astar_res = path_finder_->search(start_pos, _pt);
+    ROS_WARN_COND(astar_res == Astar::NO_PATH, "%s[%i/3] Failed to search A* path.", _label, i + 1);
+  }
+
+  bool global_path_res = false;
+  auto &gl_traj = global_data_.global_traj_;
+  if (end_pt == _pt and astar_res != Astar::NO_PATH) {
+    // короткий отрезок и путь найден
+    global_path_res = create_flat_poli_traj(path_finder_->getPath(), gl_traj);
+  } else {
+    // длинный путь
+    ROS_DEBUG_STREAM(_label << "Creating direct path");
+    points3d_t direct_path;
+    direct_path.push_back(start_pos);
+
+    if (astar_res != Astar::NO_PATH)
+      // длинный путь и первый участок траектории найден A*
+      for (const point3d_t &path_point : path_finder_->getPath())
+        if ((path_point - direct_path.back()).norm() > pp_.ctrl_pt_dist) direct_path.push_back(path_point);
+
+    point3d_t &_dp_end = direct_path.back();
+    uint num_seg = floor((_dp_end - end_pt).norm() / pp_.ctrl_pt_dist);
+
+    if (num_seg > 0) {
+      vector3d_t step = (end_pt - _dp_end).normalized() * pp_.ctrl_pt_dist;
+      for (uint i = 0; i < num_seg; ++i)
+        direct_path.push_back(direct_path.back() + step);
+    }
+
+    if (direct_path.size() == 2) direct_path.insert(direct_path.begin(), (start_pos + end_pt) * 0.5);
+
+    direct_path.push_back(end_pt);
+
+    for (point3d_t &path_pt : direct_path)
+      if (sdf_map_->getInflateOccupancy(path_pt) == 1)
+        if (not fixPointInCollision2(orientation, path_pt)) fixPointInCollision(path_pt);
+
+    global_path_res = create_flat_poli_traj(direct_path, gl_traj);
+  }
+
+  if (global_path_res) {
+    global_data_.setGlobalTraj(gl_traj, ros::Time::now());
+    ROS_DEBUG_STREAM(_label << "Global trajectory generated");
+  } else
+    ROS_WARN_STREAM(_label << "Failed to generate global trajectory");
+
+  return global_path_res;
+} // namespace fast_planner
 
 bool FastPlannerManager::planLocaTraj(double start_time, const ros::Time &time_now) {
   auto glob_end = global_data_.global_start_time_ + ros::Duration(global_data_.global_duration_);
@@ -977,13 +883,12 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
   return res;
 }
 
-// TODO: добавить проверку pp_.clearance_
 bool FastPlannerManager::fixPointInCollision(Eigen::Vector3d &point) {
   // try to find a max distance goal around
   // bool new_goal = false;
   const double dr = 0.25, dtheta = 30, dz = 0.3;
   double dist = 0;
-  double max_dist = pp_.clearance_;
+  double max_dist = pp_.clearance_ / 2.0;
   double local_traj_duration = local_data_.duration_; //< ??
   // Eigen::Vector3d goal = point;
   Eigen::Vector3d tmp_pt;
@@ -1011,42 +916,33 @@ bool FastPlannerManager::fixPointInCollision(Eigen::Vector3d &point) {
 }
 
 bool FastPlannerManager::fixPointInCollision2(const Eigen::Quaterniond &orientation, point3d_t &point) {
-  // try to find a max distance goal around
-  // bool new_goal = false;
-
   Eigen::Matrix3d trs_rot = orientation.toRotationMatrix();
   Eigen::Matrix4d trs;
   trs.setIdentity();
   trs.block<3, 3>(0, 0) = trs_rot;
   trs.block<3, 1>(0, 3) = point;
 
-  const double dr = 0.25, dtheta = 30, dz = 0.3;
-  // double dist = 0;
-  double max_dist = pp_.clearance_;
-  double local_traj_duration = local_data_.duration_; //< ??
-  // Eigen::Vector3d goal = point;
-  Eigen::Vector3d tmp_pt;
-
+  Eigen::Vector4d tmp_pt = Eigen::Vector4d::Ones();
   Eigen::Matrix3d rotation;
-  double radius = 0.4;
-  double dist = 10000;
-  int i = 0;
+  double radius = pp_.clearance_ / 2.0;
+  int i = 1;
+
   for (double r = radius; r < radius * 4; r += radius) {
-    for (double a = -M_PI_2; a < M_PI; a += 0.2) {
-      rotation = Eigen::AngleAxisd(a, Vector3d::UnitX());
-      Eigen::Vector4d tmp_pt = Eigen::Vector4d::Ones();
-      tmp_pt.block<3, 1>(0, 0) = rotation * (Vector3d::UnitY() * r);
-      tmp_pt = trs * tmp_pt;
+    for (double a = 0; a < 2.0 * M_PI; a += 0.2) {
+      rotation = Eigen::AngleAxisd(a, Vector3d::UnitX());            //< матрица вращения
+      tmp_pt.block<3, 1>(0, 0) = rotation * (Vector3d::UnitY() * r); //< вращаем точку
+      tmp_pt = trs * tmp_pt; //< переносим точку в нужную позицию
       point3d_t new_pt = tmp_pt.head<3>();
-      _visualisation->drawGoal(new_pt, 0.2, {0, 0, 1, 1}, 100 + (i % 100));
+      _visualisation->drawGoal(new_pt, 0.1, {1, 0, 0, 0.85}, 100 + (i % 100));
       ++i;
 
-      if (edt_environment_->evaluateCoarseEDT(new_pt, -1.0) > pp_.clearance_) {
+      if (sdf_map_->getDistance(new_pt) > pp_.clearance_ / 2.0) {
         point = new_pt;
         return true;
       }
     }
   }
+
   return false;
 }
 
