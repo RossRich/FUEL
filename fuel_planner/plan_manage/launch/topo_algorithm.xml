@@ -15,7 +15,9 @@
   <arg name="max_vel"/>
   <arg name="max_acc"/>
   <arg name="flight_type"/>
-  <arg name="clearance"    default="0.8"/>
+  <arg name="uav_radius"   default="0.3" type="double"/>  <!-- Радиус окружности в которой можно свободно уместить дрон -->
+  <arg name="safe_dist"    default="0.25" type="double"/> <!-- Небольшое смещение для компенсации дрейфа дрона -->
+  <arg name="clearance"    default="$(eval arg('uav_radius') + arg('safe_dist'))" type="double"/> <!-- Минималное расстояние от оси курса дрона до начала препядствия, всегда должно быть больше uav_radius -->
   <arg name="z_height"     default="$(eval arg('map_size_z_') + arg('clearance'))"/>
   <arg name="log_output"   default="screen"/>
   <arg name="enable_viz"   default="true"/>
@@ -83,7 +85,7 @@
     <param name="map_ros/k_depth_scaling_factor" value="1000.0"/>
     <param name="map_ros/skip_pixel" value="1"/>
     <param name="map_ros/esdf_slice_height" value="1.0"/>
-    <param name="map_ros/visualization_truncate_height"   value="$(arg z_height)"/>
+    <param name="map_ros/visualization_truncate_height"   value="$(eval arg('z_height') - 0.3)"/>
     <param name="map_ros/visualization_truncate_low"   value="0.0"/>
     <param name="map_ros/frame_id"       value="world"/>
     <param name="map_ros/show_occ_time"  value="false"/>
@@ -99,7 +101,7 @@
     <param name="manager/accept_vel" value="$(eval 0.0+arg('max_vel'))" type="double"/>
     <param name="manager/accept_acc" value="$(eval 0.0+arg('max_acc'))" type="double"/>
     <param name="manager/dynamic_environment"  value="0" type="int"/>
-    <param name="manager/clearance_threshold"  value="$(arg clearance)" type="double"/>
+    <param name="manager/clearance_threshold"  value="$(arg uav_radius)" type="double"/>
     <param name="manager/local_segment_length" value="5" type="double"/>
     <param name="manager/control_points_distance" value="0.8" type="double"/>
 

@@ -40,7 +40,7 @@ private:
 
   /* parameters */
   int target_type_; // 1 mannual select, 2 hard code
-  uint _raplan_max_failed = 10;
+  uint _replan_max_failed = 10;
   double _emergency_stop_dist = 0.0;
   double replan_distance_threshold_, replan_time_threshold_;
   double waypoints_[50][3];

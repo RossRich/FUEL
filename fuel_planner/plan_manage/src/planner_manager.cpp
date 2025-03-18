@@ -861,7 +861,7 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
 
     // Проверяем наличие близких препядствий к траектории
     double dist1 = 100000;
-    if (edt_environment_->sdf_map_->getDistance(fut_pt) < (pp_.clearance_ / 2.0)) {
+    if (edt_environment_->sdf_map_->getDistance(fut_pt) < pp_.clearance_) {
       dist1 = (fut_pt - cur_pt).norm();
       ROS_WARN_STREAM(_label << "Unsafe at " << fut_pt.transpose().format(vector3d_fmt) << " | Dist: " << std::fixed
                              << std::setprecision(2) << dist1);
@@ -880,6 +880,8 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
     distance = std::min(dist1, dist2);
   }
 
+  _visualisation->displayCubeList({fut_pt}, 0.2, {0.5, 0.5, 0.5, 0.85}, 5000, 1);
+
   return res;
 }
 
@@ -888,7 +890,7 @@ bool FastPlannerManager::fixPointInCollision(Eigen::Vector3d &point) {
   // bool new_goal = false;
   const double dr = 0.25, dtheta = 30, dz = 0.3;
   double dist = 0;
-  double max_dist = pp_.clearance_ / 2.0;
+  double max_dist = pp_.clearance_;
   double local_traj_duration = local_data_.duration_; //< ??
   // Eigen::Vector3d goal = point;
   Eigen::Vector3d tmp_pt;
@@ -924,19 +926,22 @@ bool FastPlannerManager::fixPointInCollision2(const Eigen::Quaterniond &orientat
 
   Eigen::Vector4d tmp_pt = Eigen::Vector4d::Ones();
   Eigen::Matrix3d rotation;
-  double radius = pp_.clearance_ / 2.0;
+  double radius = pp_.clearance_;
   int i = 1;
 
-  for (double r = radius; r < radius * 4; r += radius) {
+  for (double r = radius; r < radius * 5; r += radius) {
     for (double a = 0; a < 2.0 * M_PI; a += 0.2) {
       rotation = Eigen::AngleAxisd(a, Vector3d::UnitX());            //< матрица вращения
       tmp_pt.block<3, 1>(0, 0) = rotation * (Vector3d::UnitY() * r); //< вращаем точку
       tmp_pt = trs * tmp_pt; //< переносим точку в нужную позицию
       point3d_t new_pt = tmp_pt.head<3>();
+      auto min_z = std::max(radius, new_pt.z());      //< ограничиваем низ
+      new_pt.z() = std::min(min_z, new_pt.z() + 1.0); //< ограничиваем верх
+
       _visualisation->drawGoal(new_pt, 0.1, {1, 0, 0, 0.85}, 100 + (i % 100));
       ++i;
 
-      if (sdf_map_->getDistance(new_pt) > pp_.clearance_ / 2.0) {
+      if (sdf_map_->getDistance(new_pt) > pp_.clearance_) {
         point = new_pt;
         return true;
       }

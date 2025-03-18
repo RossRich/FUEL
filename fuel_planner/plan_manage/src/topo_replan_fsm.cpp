@@ -186,13 +186,14 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
       changeFSMExecState(EXEC_TRAJ, "FSM");
     } else {
       ++failed_num;
-      ROS_WARN("%sPlanning failed. Retrying... [%u/%u]", _label, failed_num, _raplan_max_failed);
-      if (failed_num > _raplan_max_failed) {
+      if (failed_num > _replan_max_failed) {
         failed_num = 0;
         have_target_ = false;
         changeFSMExecState(WAIT_TARGET, "FSM");
-      } else
+      } else{
+        ROS_WARN("%sPlanning failed. Retrying... [%u/%u]", _label, failed_num, _replan_max_failed);
         ros::Duration(0.25).sleep();
+      }
     }
 
     break;
@@ -229,12 +230,10 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
     ros::Time time_now = ros::Time::now();
     double t_cur = (time_now - local_traj.start_time_).toSec();
 
-    // start_pt_ = local_traj.position_traj_.evaluateDeBoorT(t_cur);
-    // start_vel_ = local_traj.velocity_traj_.evaluateDeBoorT(t_cur);
-    // start_acc_ = local_traj.acceleration_traj_.evaluateDeBoorT(t_cur);
-
     start_pt_ = odom_pos_;
     start_vel_ = odom_vel_;
+    // start_pt_ = local_traj.position_traj_.evaluateDeBoorT(t_cur);
+    // start_vel_ = local_traj.velocity_traj_.evaluateDeBoorT(t_cur);
     start_acc_ = local_traj.acceleration_traj_.evaluateDeBoorT(t_cur);
 
     start_yaw_(0) = local_traj.yaw_traj_.evaluateDeBoorT(t_cur)[0];
