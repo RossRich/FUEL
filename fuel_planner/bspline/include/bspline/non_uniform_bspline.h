@@ -23,7 +23,7 @@ public:
 
   void setKnot(const Eigen::VectorXd& knot);
   Eigen::VectorXd getKnot();
-  Eigen::MatrixXd getControlPoint();
+  const Eigen::MatrixXd& getControlPoint();
   double getKnotSpan();
   void getTimeSpan(double& um, double& um_p);
 

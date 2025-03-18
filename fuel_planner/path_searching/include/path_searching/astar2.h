@@ -39,15 +39,15 @@ class Astar {
 public:
   Astar();
   ~Astar();
-  enum { REACH_END = 1, NO_PATH = 2 };
+  enum RESULT { REACH_END = 1, NO_PATH = 2 };
 
   void init(ros::NodeHandle& nh, const EDTEnvironment::Ptr& env);
   void reset();
-  int search(const Eigen::Vector3d& start_pt, const Eigen::Vector3d& end_pt);
+  RESULT search(const Eigen::Vector3d& start_pt, const Eigen::Vector3d& end_pt);
   void setResolution(const double& res);
   static double pathLength(const vector<Eigen::Vector3d>& path);
 
-  std::vector<Eigen::Vector3d> getPath();
+  const std::vector<Eigen::Vector3d>& getPath();
   std::vector<Eigen::Vector3d> getVisited();
   double getEarlyTerminateCost();
 

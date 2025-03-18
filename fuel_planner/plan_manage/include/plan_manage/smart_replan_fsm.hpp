@@ -1,5 +1,5 @@
-#ifndef _TOPO_REPLAN_FSM_H_
-#define _TOPO_REPLAN_FSM_H_
+#if !defined(_SMART_REPLAN_FSM_)
+#define _SMART_REPLAN_FSM_
 
 #include <Eigen/Eigen>
 #include <algorithm>
@@ -23,12 +23,12 @@
 using std::vector;
 
 namespace fast_planner {
-class TopoReplanFSM {
+class SmartReplanFsm {
 public:
   enum PLAN_STEP { FULL, REFINE };
 
 private:
-  const char *_label = "[topo_fsm] ";
+  const char *_label = "[smart_fsm] ";
 
   /* ---------- flag ---------- */
   enum TARGET_TYPE { MANUAL_TARGET = 1, PRESET_TARGET, REFENCE_PATH };
@@ -39,12 +39,8 @@ private:
   PlanningVisualization::Ptr visualization_;
 
   /* parameters */
-  int target_type_; // 1 mannual select, 2 hard code
   uint _replan_max_failed = 10;
   double _emergency_stop_dist = 0.0;
-  double replan_distance_threshold_, replan_time_threshold_;
-  double waypoints_[50][3];
-  int waypoint_num_;
   bool act_map_;
   bool _enable_viz;
 
@@ -96,8 +92,8 @@ private:
   void visualization();
 
 public:
-  TopoReplanFSM(/* args */) {}
-  ~TopoReplanFSM() {}
+  SmartReplanFsm() {}
+  ~SmartReplanFsm() {}
 
   void init(ros::NodeHandle &nh);
 
@@ -106,4 +102,4 @@ public:
 
 } // namespace fast_planner
 
-#endif
+#endif // _SMART_REPLAN_FSM_

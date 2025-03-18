@@ -1,7 +1,7 @@
-#include <plan_manage/topo_replan_fsm.h>
+#include <plan_manage/smart_replan_fsm.hpp>
 
 namespace fast_planner {
-void TopoReplanFSM::init(ros::NodeHandle &nh) {
+void SmartReplanFsm::init(ros::NodeHandle &nh) {
   current_wp_ = 0;
   have_target_ = false;
   have_odom_ = false;
@@ -11,10 +11,6 @@ void TopoReplanFSM::init(ros::NodeHandle &nh) {
   exec_state_ = FSM_EXEC_STATE::INIT;
 
   /*  fsm param  */
-  nh.param("fsm/flight_type", target_type_, -1);
-  nh.param("fsm/thresh_replan", replan_time_threshold_, -1.0);
-  nh.param("fsm/thresh_no_replan", replan_distance_threshold_, -1.0);
-  nh.param("fsm/waypoint_num", waypoint_num_, -1);
   nh.param("fsm/act_map", act_map_, false);
   nh.param("fsm/enable_viz", _enable_viz, false);
 
@@ -26,15 +22,15 @@ void TopoReplanFSM::init(ros::NodeHandle &nh) {
   visualization_.reset(new PlanningVisualization(nh));
 
   /* callback */
-  exec_timer_ = nh.createTimer(ros::Duration(0.01), &TopoReplanFSM::execFSMCallback, this);
-  safety_timer_ = nh.createTimer(ros::Duration(0.05), &TopoReplanFSM::checkCollisionCallback, this);
-  // frontier_timer_ = nh.createTimer(ros::Duration(0.1), &TopoReplanFSM::frontierCallback, this);
+  exec_timer_ = nh.createTimer(ros::Duration(0.01), &SmartReplanFsm::execFSMCallback, this);
+  safety_timer_ = nh.createTimer(ros::Duration(0.05), &SmartReplanFsm::checkCollisionCallback, this);
+  // frontier_timer_ = nh.createTimer(ros::Duration(0.1), &SmartReplanFsm::frontierCallback, this);
 
-  _stop_srv = nh.advertiseService("/planning/stop", &TopoReplanFSM::stop_srv, this);
+  _stop_srv = nh.advertiseService("/planning/stop", &SmartReplanFsm::stop_srv, this);
 
-  waypoint_sub_ = nh.subscribe("/waypoint_generator/waypoint", 1, &TopoReplanFSM::waypointCallback, this);
-  path_sub_ = nh.subscribe("/waypoint_generator/path", 1, &TopoReplanFSM::pathCallback, this);
-  odom_sub_ = nh.subscribe("/odom_world", 1, &TopoReplanFSM::odometryCallback, this);
+  waypoint_sub_ = nh.subscribe("/waypoint_generator/waypoint", 1, &SmartReplanFsm::waypointCallback, this);
+  path_sub_ = nh.subscribe("/waypoint_generator/path", 1, &SmartReplanFsm::pathCallback, this);
+  odom_sub_ = nh.subscribe("/odom_world", 1, &SmartReplanFsm::odometryCallback, this);
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 20);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 20);
@@ -42,14 +38,14 @@ void TopoReplanFSM::init(ros::NodeHandle &nh) {
   _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
 }
 
-bool TopoReplanFSM::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res) {
+bool SmartReplanFsm::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res) {
   res.success = 1;
   res.message = "ok";
   _is_stop_req = true;
   return true;
 }
 
-void TopoReplanFSM::waypointCallback(const geometry_msgs::PoseStampedPtr &pose) {
+void SmartReplanFsm::waypointCallback(const geometry_msgs::PoseStampedPtr &pose) {
   if (not have_odom_) return;
 
   auto &msg_pt = pose->pose;
@@ -85,7 +81,7 @@ void TopoReplanFSM::waypointCallback(const geometry_msgs::PoseStampedPtr &pose) 
   _is_stop_req = false;
 }
 
-void TopoReplanFSM::pathCallback(const nav_msgs::PathConstPtr &msg) {
+void SmartReplanFsm::pathCallback(const nav_msgs::PathConstPtr &msg) {
   if (not have_odom_) return;
 
   ROS_WARN_STREAM(_label << "Not implemented function");
@@ -120,7 +116,7 @@ void TopoReplanFSM::pathCallback(const nav_msgs::PathConstPtr &msg) {
   _is_stop_req = false;
 } // namespace fast_planner
 
-void TopoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg) {
+void SmartReplanFsm::odometryCallback(const nav_msgs::OdometryConstPtr &msg) {
   odom_pos_(0) = msg->pose.pose.position.x;
   odom_pos_(1) = msg->pose.pose.position.y;
   odom_pos_(2) = msg->pose.pose.position.z;
@@ -137,14 +133,14 @@ void TopoReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg) {
   have_odom_ = true;
 }
 
-void TopoReplanFSM::changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call) {
+void SmartReplanFsm::changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call) {
   ROS_DEBUG_NAMED("fsm", "%sTransition from %s to %s. Caller: %s", _label, state_str[int(exec_state_)].c_str(),
                   state_str[int(new_state)].c_str(), pos_call);
 
   exec_state_ = new_state;
 }
 
-void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
+void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
   static ros::Time wait_pub_timer = ros::Time::now() + ros::Duration(1);
   static uint _replan_num = 0;
   static uint failed_num = 0;
@@ -190,7 +186,7 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
         failed_num = 0;
         have_target_ = false;
         changeFSMExecState(WAIT_TARGET, "FSM");
-      } else{
+      } else {
         ROS_WARN("%sPlanning failed. Retrying... [%u/%u]", _label, failed_num, _replan_max_failed);
         ros::Duration(0.25).sleep();
       }
@@ -262,7 +258,7 @@ void TopoReplanFSM::execFSMCallback(const ros::TimerEvent &e) {
   }
 }
 
-void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
+void SmartReplanFsm::checkCollisionCallback(const ros::TimerEvent &e) {
   /* ---------- check trajectory ---------- */
   if (exec_state_ == EXEC_TRAJ) {
     double dist;
@@ -279,7 +275,7 @@ void TopoReplanFSM::checkCollisionCallback(const ros::TimerEvent &e) {
   }
 }
 
-bool TopoReplanFSM::callPathPlanner(PLAN_STEP step) {
+bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
   auto &pm = *planner_manager_;
   auto &glob_data = pm.global_data_;
 
@@ -341,7 +337,7 @@ bool TopoReplanFSM::callPathPlanner(PLAN_STEP step) {
   return true;
 }
 
-bool TopoReplanFSM::callTopologicalTraj(PLAN_STEP step) {
+bool SmartReplanFsm::callTopologicalTraj(PLAN_STEP step) {
   if (step == PLAN_STEP::FULL)
     if (not planner_manager_->planGlobalTraj(start_pt_)) return false;
 
@@ -401,13 +397,13 @@ bool TopoReplanFSM::callTopologicalTraj(PLAN_STEP step) {
   return true;
 }
 
-void TopoReplanFSM::frontierCallback(const ros::TimerEvent &e) {
+void SmartReplanFsm::frontierCallback(const ros::TimerEvent &e) {
   if (!have_odom_) return;
   planner_manager_->searchFrontier(odom_pos_);
   visualization_->drawFrontier(planner_manager_->plan_data_.frontiers_);
 }
 
-void TopoReplanFSM::visualization() {
+void SmartReplanFsm::visualization() {
   GlobalTrajData &global_data = planner_manager_->global_data_;
   MidPlanData &plan_data = planner_manager_->plan_data_;
   LocalTrajData *local_traj = &planner_manager_->local_data_;

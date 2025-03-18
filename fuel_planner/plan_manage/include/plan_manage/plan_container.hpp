@@ -12,8 +12,8 @@
 using std::vector;
 
 namespace fast_planner {
+
 class GlobalTrajData {
-private:
 public:
   PolynomialTraj global_traj_;
   vector<NonUniformBspline> local_traj_;
@@ -34,6 +34,12 @@ public:
    * @return true - если осталось меньше чем thresh_param (обе точки близки), иначе false
    */
   bool localTrajReachTarget(float thresh_param = 1e-3) { return fabs(local_end_time_ - global_duration_) < thresh_param; }
+
+  bool is_traj_end(float thresh_sec = 0.003) {
+    auto stamp_now = ros::Time::now();
+    auto stamp_end = global_start_time_ + ros::Duration(global_duration_);
+    return stamp_now > stamp_end or (stamp_end - stamp_now).toSec() < thresh_sec;
+  }
 
   void setGlobalTraj(const PolynomialTraj &traj, const ros::Time &time) {
     global_traj_ = traj;
@@ -60,8 +66,9 @@ public:
     last_time_inc_ = time_change;
   }
 
-  /*
+  /**
    * Магическая функция возвращает точку в простанстве по заданной временной метке
+   * @NOTE: если точка вне локальной траектории, то берется позиция на глобальной траектории
    * @param t Метка времени на траектории
    * @param k Тип траектории (позиция - 0, скорость - 1, ускорение - 2)
    * @return Точка на траектории в момент времени t
@@ -89,7 +96,7 @@ public:
   }
 
   /*
-   * Get data required to parameterize a Bspline within a sphere
+   * Расчитать параметры для создания сплайна заданной длинны
    * @param start_t Начальное время на глобальной траектории
    * @param radius Длинна отрезка для параметризации
    * @param dist_pt Расстояние между контрольными точками (bspline)
@@ -124,19 +131,17 @@ struct PlanParameters {
   /* planning algorithm parameters */
   double max_vel_, max_acc_, max_jerk_; // physical limits
   double accept_vel_, accept_acc_;
-
   double max_yawdot_;
   double local_traj_len_; // local replanning trajectory length
   double ctrl_pt_dist;    // distance between adjacient B-spline control points
-  int bspline_degree_;
-  bool min_time_;
-
   double clearance_;
-  int dynamic_;
   /* processing time */
   double time_search_ = 0.0;
   double time_optimize_ = 0.0;
   double time_adjust_ = 0.0;
+  int bspline_degree_;
+  int dynamic_;
+  bool min_time_;
 };
 
 struct LocalTrajData {

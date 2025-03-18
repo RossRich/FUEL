@@ -24,7 +24,7 @@
   <arg name="waypoints_dist" default="3.0"/>
   
   <!-- main algorithm params -->
-  <include file="$(find plan_manage)/launch/topo_algorithm.xml">
+  <include file="$(find plan_manage)/launch/smart_algorithm.xml">
     <arg name="log_output" value="$(arg log_output)"/>
     <arg name="enable_viz" value="$(arg enable_viz)"/>
 
@@ -36,8 +36,8 @@
 
     <!-- sensor pose: transform of camera frame in the world frame -->
     <arg name="sensor_pose_topic" value="$(arg sensor_pose_topic)"/>
+
     <!-- subscribe ONLY TO ONE of the two topics -->
-    
     <arg name="depth_topic" value="$(arg depth_topic)"/>
     <arg name="cloud_topic" value="/pcl_render_node/cloud"/>
     
@@ -54,28 +54,18 @@
     <!-- maximum velocity and acceleration the drone will reach -->
     <arg name="max_vel" value="$(arg max_vel)" />
     <arg name="max_acc" value="$(arg max_acc)" />
-
-    <!-- 1: use 2D Nav Goal to select goal  -->
-    <!-- 2: use global waypoints below  -->
-    <!-- 3: use global reference path passing points below  -->
-    <arg name="flight_type" value="1" />
   </include>
 
   <!-- trajectory server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="$(arg log_output)">
     <remap from="/position_cmd" to="planning/pos_cmd"/>
     <remap from="/odom_world" to="$(arg odom_topic)"/>
-    <!-- <param name="traj_server/time_forward" value="1.5" type="double"/> -->
     <param name="pub_traj_id" value="0" type="int"/>
     <param name="enable_viz" value="$(arg enable_viz)"/>
   </node>
 
   <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="$(arg log_output)">
     <remap from="~odom" to="$(arg odom_topic)"/>        
-    <!-- <remap from="~goal" to="/move_base_simple/goal"/> -->
-    <!-- <remap from="~traj_start_trigger" to="/traj_start_trigger" /> -->
-    <!-- <param name="waypoint_type" value="manual-lonely-waypoint"/>     -->
-
     <param name="waypoint_type" value="dense"/>
     <param name="size_x"        value="$(arg map_size_x)" type="double"/>
     <param name="size_y"        value="$(arg map_size_y)" type="double"/>
