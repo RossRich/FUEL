@@ -47,7 +47,7 @@ add_executable(fast_planner_node
   src/fast_planner_node.cpp 
   src/kino_replan_fsm.cpp
   src/topo_replan_fsm.cpp
-  test/local_explore_fsm.cpp
+  src/smart_replan_fsm.cpp
   src/planner_manager.cpp
   src/planner_manager_dev.cpp
   )

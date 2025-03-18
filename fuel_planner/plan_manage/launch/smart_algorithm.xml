@@ -14,7 +14,6 @@
   <arg name="fy"/>
   <arg name="max_vel"/>
   <arg name="max_acc"/>
-  <arg name="flight_type"/>
   <arg name="uav_radius"   default="0.3"/>  <!-- Радиус окружности в которой можно свободно уместить дрон -->
   <arg name="safe_dist"    default="0.25"/> <!-- Небольшое смещение для компенсации дрейфа дрона -->
   <arg name="clearance"    default="$(eval arg('uav_radius') + arg('safe_dist'))"/> <!-- Минималное расстояние от оси курса дрона до начала препядствия, всегда должно быть больше uav_radius -->
@@ -40,16 +39,11 @@
     <remap from="/waypoint_generator/path" to="planning/path"/>
     
     <!-- replanning method -->
-    <param name="planner_node/planner" value="2" type="int"/>
+    <param name="planner_node/planner" value="3" type="int"/>
 
     <!-- planning fsm -->
-    <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/>
     <param name="fsm/act_map"     value="false" type="bool"/>
-    <!-- не производить перепланирования если дрон не успел пролететь более thresh_replan секунд -->
-    <param name="fsm/thresh_replan"    value="0.8" type="double"/>
-    <!-- не производить перепланирования если осталось thresh_no_replan метров до конца пути -->
-    <param name="fsm/thresh_no_replan" value="1.0" type="double"/>
-    <param name="fsm/enable_viz"       value="$(arg enable_viz)" type="bool"/>
+    <param name="fsm/enable_viz"  value="$(arg enable_viz)" type="bool"/>
 
     <param name="sdf_map/resolution"   value="0.1" /> 
     <param name="sdf_map/frame_width"  value="$(arg frame_width)" /> 
@@ -105,7 +99,7 @@
     <param name="manager/control_points_distance" value="0.8" type="double"/>
 
     <param name="manager/use_geometric_path" value="true" type="bool"/>
-    <param name="manager/use_kinodynamic_path" value="true" type="bool"/>
+    <param name="manager/use_kinodynamic_path" value="false" type="bool"/>
     <param name="manager/use_topo_path" value="false" type="bool"/>
     <param name="manager/use_optimization" value="true" type="bool"/>
     <param name="manager/use_active_perception" value="false" type="bool"/>
@@ -117,7 +111,7 @@
     <param name="topo_prm/sample_inflate_z" value="0.8" type="double"/>
     <param name="topo_prm/max_sample_time" value="0.005" type="double"/>
     <param name="topo_prm/max_sample_num"  value="2000" type="int"/>
-    <param name="topo_prm/clearance"       value="$(arg clearance)" type="double"/>
+    <param name="topo_prm/clearance"       value="$(arg uav_radius)" type="double"/>
     <param name="topo_prm/max_raw_path"    value="300" type="int"/>
     <param name="topo_prm/max_raw_path2"   value="25" type="int"/>
     <param name="topo_prm/short_cut_num"   value="1" type="int"/>
@@ -147,6 +141,7 @@
     <param name="optimization/max_iteration_time1" value="0.0001" type="double"/>
     <param name="optimization/max_iteration_time2" value="0.005" type="double"/>
     <param name="optimization/max_iteration_time3" value="0.010" type="double"/>
+    <param name="optimization/wnl" value="1.0" type="double"/>
 
     <param name="bspline/limit_vel" value="$(arg max_vel)" type="double"/>
     <param name="bspline/limit_acc" value="$(arg max_acc)" type="double"/>
@@ -181,7 +176,6 @@
     <param name="heading_planner/w" value="10.0" type="double"/>
     <param name="heading_planner/weight_type" value="0" type="double"/>
 
-    <param name="optimization/wnl" value="1.0" type="double"/>
     <param name="visibility/visib_min" value="0.25" type="double"/>
     <param name="visibility/max_acc" value="$(arg max_acc)" type="double"/>
     <param name="visibility/r0" value="0.0" type="double"/>
@@ -189,5 +183,4 @@
     <param name="visibility/max_safe_dist" value="2.0" type="double"/>
     <param name="visibility/safe_margin" value="0.5" type="double"/>
   </node>
-
 </launch>
