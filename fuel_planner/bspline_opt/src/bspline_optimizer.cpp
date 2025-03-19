@@ -16,6 +16,7 @@ const int BsplineOptimizer::GUIDE = (1 << 5);
 const int BsplineOptimizer::WAYPOINTS = (1 << 6);
 const int BsplineOptimizer::VIEWCONS = (1 << 7);
 const int BsplineOptimizer::MINTIME = (1 << 8);
+const int BsplineOptimizer::SWARM = (1 << 9);
 
 const int BsplineOptimizer::GUIDE_PHASE = BsplineOptimizer::SMOOTHNESS | BsplineOptimizer::GUIDE |
     BsplineOptimizer::START | BsplineOptimizer::END;
@@ -32,8 +33,10 @@ void BsplineOptimizer::setParam(ros::NodeHandle& nh) {
   nh.param("optimization/ld_waypt", ld_waypt_, -1.0);
   nh.param("optimization/ld_view", ld_view_, -1.0);
   nh.param("optimization/ld_time", ld_time_, -1.0);
+  nh.param("optimization/ld_swarm", ld_swarm_, -1.0);
 
   nh.param("optimization/dist0", dist0_, -1.0);
+  nh.param("optimization/swarm_safe_dist", swarm_safe_dist_, -1.0);
   nh.param("optimization/max_vel", max_vel_, -1.0);
   nh.param("optimization/max_acc", max_acc_, -1.0);
   nh.param("optimization/dlmin", dlmin_, -1.0);
@@ -74,6 +77,7 @@ void BsplineOptimizer::setCostFunction(const int& cost_code) {
   if (cost_function_ & WAYPOINTS) cost_str += " waypt |";
   if (cost_function_ & VIEWCONS) cost_str += " view  |";
   if (cost_function_ & MINTIME) cost_str += " time  |";
+  if (cost_function_ & SWARM) cost_str += " swarm |";
 
   ROS_DEBUG_STREAM(_label <<  "Cost func: " << cost_str);
 }
@@ -105,6 +109,10 @@ void BsplineOptimizer::setBoundaryStates(const vector<Eigen::Vector3d>& start,
 
 void BsplineOptimizer::setTimeLowerBound(const double& lb) {
   time_lb_ = lb;
+}
+
+void BsplineOptimizer::setSwarmTrajs(const vector<NonUniformBspline>& trajs) {
+  swarm_trajs_ = trajs;
 }
 
 void BsplineOptimizer::optimize(Eigen::MatrixXd& points, double& dt, const int& cost_function,
@@ -152,8 +160,10 @@ void BsplineOptimizer::optimize(Eigen::MatrixXd& points, double& dt, const int& 
   g_waypoints_.resize(point_num_);
   g_view_.resize(point_num_);
   g_time_.resize(point_num_);
+  g_swarm_.resize(point_num_);
 
   comb_time = 0.0;
+  plan_start_time_ = ros::Time::now().toSec();
 
   optimize();
 
@@ -175,22 +185,9 @@ void BsplineOptimizer::optimize() {
   // Set axis aligned bounding box for optimization
   Eigen::Vector3d bmin, bmax;
   edt_environment_->sdf_map_->getBox(bmin, bmax);
-  for (int k = 0; k < 3; ++k) {
-    bmin[k] += 0.1;
-    bmax[k] -= 0.1;
-  }
-  // Deprecated: does not optimize start and end control points
-  // for (int i = order_; i < pt_num; ++i)
-  // {
-  //   if (!(cost_function_ & BOUNDARY) && i >= pt_num - order_)
-  //     continue;
-  //   for (int j = 0; j < dim_; j++)
-  //   {
-  //     double cij = control_points_(i, j);
-  //     if (dim_ != 1)
-  //       cij = max(min(cij, bmax[j % 3]), bmin[j % 3]);
-  //     q[dim_ * (i - order_) + j] = cij;
-  //   }
+  // for (int k = 0; k < 3; ++k) {
+  //   bmin[k] += 0.1;
+  //   bmax[k] -= 0.1;
   // }
 
   vector<double> q(variable_num_);
@@ -516,8 +513,39 @@ void BsplineOptimizer::calcTimeCost(const double& dt, double& cost, double& gt) 
   }
 }
 
-void BsplineOptimizer::combineCost(const std::vector<double>& x, std::vector<double>& grad,
-                                   double& f_combine) {
+void BsplineOptimizer::calcSwarmCost(const vector<Eigen::Vector3d>& q, const double& dt,
+    double& cost, vector<Eigen::Vector3d>& gradient) {
+  cost = 0.0;
+  Eigen::Vector3d zero(0, 0, 0);
+  std::fill(gradient.begin(), gradient.end(), zero);
+
+  constexpr double a = 2.5, b = 1.0, inv_a2 = 1 / a / a, inv_b2 = 1 / b / b;
+
+  // Compute distance to other drones' trajectories
+
+  for (size_t i = 0; i < swarm_trajs_.size(); ++i) {
+    for (size_t j = order_; j < q.size() - order_; ++j) {
+      double time = plan_start_time_ + (j - order_ + 2) * dt;
+      double cor_time = min(time - swarm_trajs_[i].start_time_, swarm_trajs_[i].duration_);
+
+      Eigen::Vector3d cor_pos = swarm_trajs_[i].evaluateDeBoorT(cor_time);
+      Eigen::Vector3d pos_diff = q[j] - cor_pos;
+
+      double ellip_dist = sqrt(pos_diff(2) * pos_diff(2) * inv_a2 +
+                               (pos_diff(0) * pos_diff(0) + pos_diff(1) * pos_diff(1)) * inv_b2);
+      if (ellip_dist < swarm_safe_dist_) {
+        cost += pow(ellip_dist - swarm_safe_dist_, 2);
+        auto tmp = 4 * (1 - swarm_safe_dist_ / ellip_dist);
+        gradient[j][0] += tmp * pos_diff[0] * inv_b2;
+        gradient[j][1] += tmp * pos_diff[1] * inv_b2;
+        gradient[j][2] += tmp * pos_diff[2] * inv_a2;
+      }
+    }
+  }
+}
+
+void BsplineOptimizer::combineCost(
+    const std::vector<double>& x, std::vector<double>& grad, double& f_combine) {
   {
     /* Convert the NLopt format vector to control points. */
 
@@ -642,6 +670,13 @@ void BsplineOptimizer::combineCost(const std::vector<double>& x, std::vector<dou
     calcTimeCost(dt, f_time, gt_time);
     f_combine += ld_time_ * f_time;
     grad[variable_num_ - 1] += ld_time_ * gt_time;
+  }
+  if (cost_function_ & SWARM) {
+    double f_swarm = 0;
+    calcSwarmCost(g_q_, dt, f_swarm, g_swarm_);
+    f_combine += ld_swarm_ * f_swarm;
+    for (int i = 0; i < point_num_; i++)
+      for (int j = 0; j < dim_; j++) grad[dim_ * i + j] += ld_swarm_ * g_swarm_[i](j);
   }
 
   comb_time += (ros::Time::now() - t1).toSec();

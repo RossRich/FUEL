@@ -3,6 +3,7 @@
 
 #include <Eigen/Eigen>
 #include <active_perception/traj_visibility.h>
+#include <bspline/non_uniform_bspline.h>
 #include <ros/ros.h>
 
 // Gradient and elasitc band optimization
@@ -24,7 +25,7 @@ public:
   static const int WAYPOINTS;
   static const int VIEWCONS;
   static const int MINTIME;
-
+  static const int SWARM;
   static const int GUIDE_PHASE;
   static const int NORMAL_PHASE;
 
@@ -52,6 +53,8 @@ public:
                     const vector<int>& waypt_idx);  // N-2 constraints at most
   void setViewConstraint(const ViewConstraint& vc);
   void enableDynamic(double time_start);
+
+  void setSwarmTrajs(const vector<NonUniformBspline>& trajs);
 
   void optimize();
 
@@ -81,6 +84,8 @@ private:
                          vector<Eigen::Vector3d>& gradient_q);
   void calcViewCost(const vector<Eigen::Vector3d>& q, double& cost, vector<Eigen::Vector3d>& gradient_q);
   void calcTimeCost(const double& dt, double& cost, double& gt);
+  void calcSwarmCost(const vector<Eigen::Vector3d>& q, const double& dt, double& cost,
+      vector<Eigen::Vector3d>& gradient_q);
   bool isQuadratic();
 
   shared_ptr<EDTEnvironment> edt_environment_;
@@ -101,10 +106,14 @@ private:
   bool dynamic_;       // moving obstacles ?
   double start_time_;  // global time for moving obstacles
 
+  vector<NonUniformBspline> swarm_trajs_;  // Trajectories of other drones
+  double plan_start_time_;                 // Start time of swarm planning
+
   /* Parameters of optimization  */
   int order_;  // bspline degree
   int bspline_degree_;
-  double ld_smooth_, ld_dist_, ld_feasi_, ld_start_, ld_end_, ld_guide_, ld_waypt_, ld_view_, ld_time_;
+  double ld_smooth_, ld_dist_, ld_feasi_, ld_start_, ld_end_, ld_guide_, ld_waypt_, ld_view_,
+      ld_time_, ld_swarm_;
   double dist0_;              // safe distance
   double max_vel_, max_acc_;  // dynamic limits
   double wnl_, dlmin_;
@@ -112,10 +121,11 @@ private:
   int algorithm2_;                // optimization algorithms for general cost
   int max_iteration_num_[4];      // stopping criteria that can be used
   double max_iteration_time_[4];  // stopping criteria that can be used
+  double swarm_safe_dist_;        // safe distance between swarm drones
 
   // Data of opt
   vector<Eigen::Vector3d> g_q_, g_smoothness_, g_distance_, g_feasibility_, g_start_, g_end_, g_guide_,
-      g_waypoints_, g_view_, g_time_;
+      g_waypoints_, g_view_, g_time_, g_swarm_;
 
   int variable_num_;  // optimization variables
   int point_num_;

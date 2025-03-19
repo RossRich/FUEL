@@ -128,6 +128,8 @@
     <param name="optimization/ld_waypt" value="5.0" type="double"/>
     <param name="optimization/ld_view" value="0.0" type="double"/>
     <param name="optimization/ld_time" value="1.0" type="double"/>
+    <param name="optimization/ld_swarm" value="5.0" type="double"/>
+    <param name="optimization/swarm_safe_dist" value="1.5" type="double"/>
     
     <param name="optimization/dist0" value="$(arg clearance)" type="double"/>
     <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>

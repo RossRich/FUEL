@@ -29,10 +29,12 @@ void NonUniformBspline::setUniformBspline(const Eigen::MatrixXd& points, const i
     else
       u_[i] = u_[i - 1] + knot_span_;
   }
+  duration_ = getTimeSum();
 }
 
 void NonUniformBspline::setKnot(const Eigen::VectorXd& knot) {
   this->u_ = knot;
+  duration_ = getTimeSum();
 }
 
 Eigen::VectorXd NonUniformBspline::getKnot() {
