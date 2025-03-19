@@ -11,7 +11,7 @@
 #include <vector>
 #include <visualization_msgs/Marker.h>
 
-#include <bspline/Bspline.h>
+#include <planner_msgs/Bspline.h>
 #include <bspline_opt/bspline_optimizer.h>
 #include <path_searching/kinodynamic_astar.h>
 #include <plan_env/edt_environment.h>

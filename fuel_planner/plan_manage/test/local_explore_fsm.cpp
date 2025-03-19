@@ -1,4 +1,3 @@
-
 #include <plan_manage/local_explore_fsm.h>
 
 namespace fast_planner {
@@ -35,7 +34,7 @@ void LocalExploreFSM::init(ros::NodeHandle& nh) {
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 10);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 10);
-  bspline_pub_ = nh.advertise<bspline::Bspline>("/planning/bspline", 10);
+  bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 10);
 }
 
 void LocalExploreFSM::waypointCallback(const nav_msgs::PathConstPtr& msg) {

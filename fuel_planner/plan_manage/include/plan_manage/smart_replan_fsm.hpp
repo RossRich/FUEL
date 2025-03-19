@@ -11,7 +11,7 @@
 #include <vector>
 #include <visualization_msgs/Marker.h>
 
-#include <bspline/Bspline.h>
+#include <planner_msgs/Bspline.h>
 #include <bspline_opt/bspline_optimizer.h>
 #include <path_searching/kinodynamic_astar.h>
 #include <plan_env/edt_environment.h>
@@ -65,6 +65,7 @@ private:
   ros::Subscriber waypoint_sub_;
   ros::Subscriber path_sub_;
   ros::Subscriber odom_sub_;
+  
 
   ros::Publisher _wait_goal_pub;
   ros::Publisher new_pub_;
@@ -74,7 +75,6 @@ private:
   /* helper functions */
   bool callTopologicalTraj(PLAN_STEP step); // topo path guided gradient-based
                                             // optimization; 1: new, 2: replan
-
   bool callPathPlanner(PLAN_STEP step);
 
   void changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call);

@@ -44,7 +44,7 @@ void FastExplorationFSM::init(ros::NodeHandle& nh) {
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 10);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 10);
-  bspline_pub_ = nh.advertise<bspline::Bspline>("/planning/bspline", 10);
+  bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 10);
 }
 
 void FastExplorationFSM::FSMCallback(const ros::TimerEvent& e) {
@@ -169,7 +169,7 @@ int FastExplorationFSM::callExplorationPlanner() {
     auto info = &planner_manager_->local_data_;
     info->start_time_ = (ros::Time::now() - time_r).toSec() > 0 ? ros::Time::now() : time_r;
 
-    bspline::Bspline bspline;
+    planner_msgs::Bspline bspline;
     bspline.order = planner_manager_->pp_.bspline_degree_;
     bspline.start_time = info->start_time_;
     bspline.traj_id = info->traj_id_;

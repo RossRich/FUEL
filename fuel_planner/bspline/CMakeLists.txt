@@ -12,30 +12,13 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  visualization_msgs
   plan_env
-  cv_bridge
-  message_generation
 )
-
-# Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  Bspline.msg
-  )
-  
-# Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-  geometry_msgs
-)
-
 
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES bspline
- CATKIN_DEPENDS message_runtime
+#  CATKIN_DEPENDS planner_msgs
 #  DEPENDS system_lib
 )
 

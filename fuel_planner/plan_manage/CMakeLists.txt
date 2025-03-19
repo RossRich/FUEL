@@ -16,7 +16,6 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   geometry_msgs
-  quadrotor_msgs
   poly_traj
   plan_env
   path_searching
@@ -25,13 +24,14 @@ find_package(catkin REQUIRED COMPONENTS
   traj_utils
   active_perception
   cv_bridge
+  planner_msgs
 )
 
 
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES plan_manage
- CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils quadrotor_msgs)
+ CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils planner_msgs)
 
 include_directories(
   include
@@ -73,23 +73,4 @@ target_link_libraries(traj_server ${catkin_LIBRARIES} -ldw)
 #   )
 # target_link_libraries(compare_topo 
 #   ${catkin_LIBRARIES}
-#   )
-
-# add_executable(rotation test/rotation.cpp)
-# target_link_libraries(rotation ${catkin_LIBRARIES})
-
-add_executable(proc_msg 
-    test/process_msg.cpp
-)
-target_link_libraries( proc_msg
-    ${catkin_LIBRARIES} 
-    ${PCL_LIBRARIES}
-    )  
-
-add_executable(proc_msg2 
-    test/process_msg2.cpp
-)
-target_link_libraries( proc_msg2
-    ${catkin_LIBRARIES} 
-    ${PCL_LIBRARIES}
-    )  
+#   ) 

@@ -1,6 +1,6 @@
 #include "bspline/non_uniform_bspline.h"
 #include "nav_msgs/Odometry.h"
-#include "bspline/Bspline.h"
+#include <planner_msgs/Bspline.h>
 #include "quadrotor_msgs/PositionCommand.h"
 #include "std_msgs/Empty.h"
 #include "visualization_msgs/Marker.h"
@@ -104,7 +104,7 @@ void visCallback(const ros::TimerEvent& e) {
   displayTrajWithColor(executed_cmd_, 0.05, Eigen::Vector4d(0, 1, 0, 1), pub_traj_id_);
 }
 
-void bsplineCallback(bspline::BsplineConstPtr msg) {
+void bsplineCallback(planner_msgs::BsplineConstPtr msg) {
   // parse pos traj
   Eigen::MatrixXd pos_pts(msg->pos_pts.size(), 3);
   Eigen::VectorXd knots(msg->knots.size());

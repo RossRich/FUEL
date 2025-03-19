@@ -1,10 +1,10 @@
-#include "bspline/Bspline.h"
 #include "bspline/non_uniform_bspline.h"
 #include "nav_msgs/Odometry.h"
-#include "quadrotor_msgs/PositionCommand.h"
 #include "std_msgs/Empty.h"
 #include "visualization_msgs/Marker.h"
 #include <active_perception/perception_utils.h>
+#include <planner_msgs/Bspline.h>
+#include <planner_msgs/PositionCommand.h>
 #include <poly_traj/polynomial_traj.h>
 #include <ros/ros.h>
 
@@ -19,7 +19,7 @@ using fast_planner::PolynomialTraj;
 
 ros::Publisher cmd_vis_pub, pos_cmd_pub, traj_pub;
 nav_msgs::Odometry odom;
-quadrotor_msgs::PositionCommand cmd;
+planner_msgs::PositionCommand cmd;
 
 // Info of generated traj
 vector<NonUniformBspline> traj_;
@@ -210,7 +210,7 @@ void visCallback(const ros::TimerEvent &e) {
   displayTrajWithColor(traj_real_, 0.03, Eigen::Vector4d(0.925, 0.054, 0.964, 1), pub_traj_id_);
 }
 
-void bsplineCallback(const bspline::BsplineConstPtr &msg) {
+void bsplineCallback(const planner_msgs::BsplineConstPtr &msg) {
   // Received traj should have ascending traj_id
   if (msg->traj_id <= traj_id_) {
     ROS_ERROR("out of order bspline.");
@@ -468,7 +468,7 @@ int main(int argc, char **argv) {
   ros::Subscriber pg_T_vio_sub = node.subscribe("/loop_fusion/pg_T_vio", 10, pgTVioCallback);
 
   cmd_vis_pub = node.advertise<visualization_msgs::Marker>("planning/position_cmd_vis", 10);
-  pos_cmd_pub = node.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
+  pos_cmd_pub = node.advertise<planner_msgs::PositionCommand>("/position_cmd", 50);
   traj_pub = node.advertise<visualization_msgs::Marker>("planning/travel_traj", 10);
 
   ros::Timer cmd_timer = node.createTimer(ros::Duration(0.01), cmdCallback);
@@ -487,7 +487,7 @@ int main(int argc, char **argv) {
 
   cmd.header.stamp = ros::Time::now();
   cmd.header.frame_id = "world";
-  cmd.trajectory_flag = quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_READY;
+  cmd.trajectory_flag = planner_msgs::PositionCommand::TRAJECTORY_STATUS_READY;
   cmd.trajectory_id = traj_id_;
   cmd.position.x = init_pos[0];
   cmd.position.y = init_pos[1];

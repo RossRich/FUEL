@@ -15,7 +15,7 @@
 #include <path_searching/kinodynamic_astar.h>
 #include <plan_env/edt_environment.h>
 #include <plan_env/obj_predictor.h>
-#include <bspline/Bspline.h>
+#include <planner_msgs/Bspline.h>
 #include <plan_manage/planner_manager.h>
 #include <traj_utils/planning_visualization.h>
 

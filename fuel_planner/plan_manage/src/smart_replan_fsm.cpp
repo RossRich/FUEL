@@ -34,7 +34,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 20);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 20);
-  bspline_pub_ = nh.advertise<bspline::Bspline>("/planning/bspline", 20);
+  bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 20);
   _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
 }
 
@@ -304,7 +304,7 @@ bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
   /* publish newest trajectory to server */
 
   /* publish traj */
-  bspline::Bspline bspline;
+  planner_msgs::Bspline bspline;
   bspline.order = planner_manager_->pp_.bspline_degree_;
   bspline.start_time = local_traj_data.start_time_;
   bspline.traj_id = local_traj_data.traj_id_;
@@ -364,7 +364,7 @@ bool SmartReplanFsm::callTopologicalTraj(PLAN_STEP step) {
   /* publish newest trajectory to server */
 
   /* publish traj */
-  bspline::Bspline bspline;
+  planner_msgs::Bspline bspline;
   bspline.order = planner_manager_->pp_.bspline_degree_;
   bspline.start_time = local_traj.start_time_;
   bspline.traj_id = local_traj.traj_id_;

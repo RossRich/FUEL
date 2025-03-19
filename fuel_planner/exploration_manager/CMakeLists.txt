@@ -15,7 +15,6 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   geometry_msgs
-  quadrotor_msgs
   plan_env
   path_searching
   bspline
@@ -25,12 +24,13 @@ find_package(catkin REQUIRED COMPONENTS
   lkh_tsp_solver
   plan_manage
   cv_bridge
+  planner_msgs
 )
 
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES exploration_manager
- CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils lkh_tsp_solver plan_manage quadrotor_msgs
+ CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils lkh_tsp_solver plan_manage planner_msgs
 #  DEPENDS system_lib
 )
 
@@ -61,13 +61,13 @@ target_link_libraries(exploration_node
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(write_tsp test/write_tsp.cpp)
-target_link_libraries(write_tsp
-  ${catkin_LIBRARIES} 
-)
+# add_executable(write_tsp test/write_tsp.cpp)
+# target_link_libraries(write_tsp
+#   ${catkin_LIBRARIES} 
+# )
 
 
-add_executable(load_obj test/load_obj.cpp)
-target_link_libraries(load_obj
-  ${catkin_LIBRARIES} ${PCL_LIBRARIES}
-)
+# add_executable(load_obj test/load_obj.cpp)
+# target_link_libraries(load_obj
+#   ${catkin_LIBRARIES} ${PCL_LIBRARIES}
+# )

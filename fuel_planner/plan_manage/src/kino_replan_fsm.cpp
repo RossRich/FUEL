@@ -36,7 +36,7 @@ void KinoReplanFSM::init(ros::NodeHandle &nh) {
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 10);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 10);
-  bspline_pub_ = nh.advertise<bspline::Bspline>("/planning/bspline", 10);
+  bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 10);
   _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
 }
 
@@ -375,7 +375,7 @@ bool KinoReplanFSM::callKinodynamicReplan() {
     info->start_time_ = time_r;
 
     /* publish traj */
-    bspline::Bspline bspline;
+    planner_msgs::Bspline bspline;
     bspline.order = planner_manager_->pp_.bspline_degree_;
     bspline.start_time = info->start_time_;
     bspline.traj_id = info->traj_id_;
