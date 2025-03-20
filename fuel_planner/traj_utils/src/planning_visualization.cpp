@@ -6,30 +6,28 @@ namespace fast_planner {
 PlanningVisualization::PlanningVisualization(ros::NodeHandle &nh) {
   node = nh;
 
-  traj_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/trajectory", 100);
+  traj_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/trajectory", 100);
   pubs_.push_back(traj_pub_);
 
-  topo_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/topo_path", 100);
+  topo_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/topo_path", 100);
   pubs_.push_back(topo_pub_);
 
-  predict_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/prediction", 100);
+  predict_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/prediction", 100);
   pubs_.push_back(predict_pub_);
 
-  visib_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/"
-                                                          "visib_constraint",
-                                                          100);
+  visib_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/visib_constraint", 100);
   pubs_.push_back(visib_pub_);
 
-  frontier_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/frontier", 10000);
+  frontier_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/frontier", 10000);
   pubs_.push_back(frontier_pub_);
 
-  yaw_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/yaw", 100);
+  yaw_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/yaw", 100);
   pubs_.push_back(yaw_pub_);
 
-  viewpoint_pub_ = node.advertise<visualization_msgs::Marker>("/planning_vis/viewpoints", 1000);
+  viewpoint_pub_ = node.advertise<visualization_msgs::Marker>("planning_vis/viewpoints", 1000);
   pubs_.push_back(viewpoint_pub_);
 
-  _bsplines_pub = node.advertise<visualization_msgs::Marker>("/planning_vis/bsplines", 100);
+  _bsplines_pub = node.advertise<visualization_msgs::Marker>("planning_vis/bsplines", 100);
   pubs_.push_back(_bsplines_pub);
 
   last_topo_path1_num_ = 0;
@@ -313,10 +311,10 @@ void PlanningVisualization::drawBsplinesPhase2(vector<NonUniformBspline> &bsplin
   vector<Eigen::Vector3d> empty;
 
   // for (int i = 0; i < last_bspline_phase2_num_; ++i) {
-    // drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "BSplinePhase2", i, 0);
-    // drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "B-Spline", i + 50, 0);
-    // displaySphereList(empty, size, Eigen::Vector4d(1, 0, 0, 1), BSPLINE + (50 + i) % 100);
-    // displaySphereList(empty, size, Eigen::Vector4d(1, 0, 0, 1), BSPLINE_CTRL_PT + (50 + i) % 100);
+  // drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "BSplinePhase2", i, 0);
+  // drawSpheres(empty, size, Eigen::Vector4d(1, 0, 0, 1), "B-Spline", i + 50, 0);
+  // displaySphereList(empty, size, Eigen::Vector4d(1, 0, 0, 1), BSPLINE + (50 + i) % 100);
+  // displaySphereList(empty, size, Eigen::Vector4d(1, 0, 0, 1), BSPLINE_CTRL_PT + (50 + i) % 100);
   // }
   last_bspline_phase2_num_ = bsplines.size();
 
@@ -446,7 +444,8 @@ void PlanningVisualization::drawGeometricPath(const vector<Eigen::Vector3d> &pat
   displaySphereList(path, resolution, color, PATH + id % 100);
 }
 
-void PlanningVisualization::drawPolynomialTraj(PolynomialTraj poly_traj, double resolution, const Eigen::Vector4d &color, int id) {
+void PlanningVisualization::drawPolynomialTraj(PolynomialTraj poly_traj, double resolution, const Eigen::Vector4d &color,
+                                               int id) {
   vector<Eigen::Vector3d> poly_pts;
   poly_traj.getSamplePoints(poly_pts, 0.1);
   drawSpheres(poly_pts, resolution, color, "PolyTraj", POLY_TRAJ + id % 100, ROS_PUBLISHER::GLOBAL_TRAJECTORY);

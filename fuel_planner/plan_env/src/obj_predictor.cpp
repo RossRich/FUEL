@@ -71,7 +71,7 @@ void ObjPredictor::init() {
     pose_subs_.push_back(pose_sub);
   }
 
-  marker_sub_ = node_handle_.subscribe<visualization_msgs::Marker>("/dynamic/obj", 10,
+  marker_sub_ = node_handle_.subscribe<visualization_msgs::Marker>("dynamic/obj", 10,
                                                                    &ObjPredictor::markerCallback, this);
 
   /* update prediction */

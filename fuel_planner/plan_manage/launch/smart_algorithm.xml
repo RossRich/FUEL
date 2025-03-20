@@ -24,19 +24,20 @@
   <arg name="local_box_inf" default="1.0"/> <!-- На сколько увеличить область пространства для работы алгоритма (локальное окно планирования - update range)-->
   
   <!-- main node -->
-  <node pkg="plan_manage" name="fast_planner_node" type="fast_planner_node" output="$(arg log_output)">
-    <remap from="/odom_world"       to="$(arg odometry_topic)"/>
-    <remap from="/map_ros/pose"     to = "$(arg sensor_pose_topic)"/> 
-    <remap from="/map_ros/depth"    to = "$(arg depth_topic)"/>
-    <remap from="/map_ros/cloud"    to="$(arg cloud_topic)"/>
-    <remap from="/planning/replan"  to="planning/replan"/>
-    <remap from="/planning/new"     to="planning/new"/>
-    <remap from="/planning/bspline" to="planning/bspline"/>
-    <remap from="/planning/wait"    to="planning/wait"/>
-    <remap from="/planning/stop"    to="planning/stop"/>
-
-    <remap from="/waypoint_generator/waypoint" to="planning/waypoint"/>
-    <remap from="/waypoint_generator/path" to="planning/path"/>
+  <node pkg="plan_manage" name="fast_planner" type="fast_planner_node" output="$(arg log_output)">
+    <remap from="/map_ros/pose"        to="$(arg sensor_pose_topic)"/> 
+    <remap from="/map_ros/depth"       to="$(arg depth_topic)"/>
+    <remap from="/map_ros/cloud"       to="$(arg cloud_topic)"/>
+    <remap from="/planning/odom_world" to="$(arg odometry_topic)"/>
+    <remap from="/planning/replan"     to="planning/replan"/>
+    <remap from="/planning/new"        to="planning/new"/>
+    <remap from="/planning/bspline"    to="planning/bspline"/>
+    <remap from="/planning/wait"       to="planning/wait"/>
+    <remap from="/planning/stop"       to="planning/stop"/>
+    <remap from="/planning/path"       to="planning/path"/>
+    <remap from="/planning/waypoint"   to="planning/waypoint"/>
+    <remap from="/planning/agent_traj_pub" to="planning/agent_traj_pub"/>
+    <remap from="/planning/agent_traj_sub" to="planning/agent_traj_pub"/>
     
     <!-- replanning method -->
     <param name="planner_node/planner" value="3" type="int"/>

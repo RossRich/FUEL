@@ -62,14 +62,14 @@ void MapROS::init() {
   esdf_timer_ = node_.createTimer(ros::Duration(0.05), &MapROS::updateESDFCallback, this);
   vis_timer_ = node_.createTimer(ros::Duration(0.05), &MapROS::visCallback, this);
 
-  map_all_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/sdf_map/occupancy_all", 10);
-  map_local_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/sdf_map/occupancy_local", 10);
+  map_all_pub_ = node_.advertise<sensor_msgs::PointCloud2>("sdf_map/occupancy_all", 10);
+  map_local_pub_ = node_.advertise<sensor_msgs::PointCloud2>("sdf_map/occupancy_local", 10);
   map_local_inflate_pub_ =
-      node_.advertise<sensor_msgs::PointCloud2>("/sdf_map/occupancy_local_inflate", 10);
-  unknown_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/sdf_map/unknown", 10);
-  esdf_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/sdf_map/esdf", 10);
-  update_range_pub_ = node_.advertise<visualization_msgs::Marker>("/sdf_map/update_range", 10);
-  depth_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/sdf_map/depth_cloud", 10);
+      node_.advertise<sensor_msgs::PointCloud2>("sdf_map/occupancy_local_inflate", 10);
+  unknown_pub_ = node_.advertise<sensor_msgs::PointCloud2>("sdf_map/unknown", 10);
+  esdf_pub_ = node_.advertise<sensor_msgs::PointCloud2>("sdf_map/esdf", 10);
+  update_range_pub_ = node_.advertise<visualization_msgs::Marker>("sdf_map/update_range", 10);
+  depth_pub_ = node_.advertise<sensor_msgs::PointCloud2>("sdf_map/depth_cloud", 10);
 
   depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "/map_ros/depth", 50));
   cloud_sub_.reset(
@@ -107,7 +107,7 @@ void MapROS::visCallback(const ros::TimerEvent& e) {
   publishDepth();
 }
 
-void MapROS::updateESDFCallback(const ros::TimerEvent& /*event*/) {
+void MapROS::updateESDFCallback(const ros::TimerEvent&) {
   if (!esdf_need_update_) return;
   auto t1 = ros::Time::now();
 

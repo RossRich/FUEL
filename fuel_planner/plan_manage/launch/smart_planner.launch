@@ -59,13 +59,17 @@
   <!-- trajectory server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="$(arg log_output)">
     <remap from="/position_cmd" to="planning/pos_cmd"/>
-    <remap from="/odom_world" to="$(arg odom_topic)"/>
-    <param name="pub_traj_id" value="0" type="int"/>
-    <param name="enable_viz" value="$(arg enable_viz)"/>
+    <remap from="/odom_world"       to="$(arg odom_topic)"/>
+    <remap from="/planning/replan"  to="planning/replan"/>
+    <remap from="/planning/new"     to="planning/new"/>
+    <remap from="/planning/bspline" to="planning/bspline"/>
+
+    <param name="enable_viz"  value="$(arg enable_viz)"/>
   </node>
 
   <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="$(arg log_output)">
-    <remap from="~odom" to="$(arg odom_topic)"/>        
+    <remap from="/odom_world" to="$(arg odom_topic)"/>
+
     <param name="waypoint_type" value="dense"/>
     <param name="size_x"        value="$(arg map_size_x)" type="double"/>
     <param name="size_y"        value="$(arg map_size_y)" type="double"/>

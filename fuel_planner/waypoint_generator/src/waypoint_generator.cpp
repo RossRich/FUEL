@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "waypoint_generator");
   ros::NodeHandle n("~");
   n.param("waypoint_type", waypoint_type, string("manual"));
-  ros::Subscriber sub1 = n.subscribe("odom", 10, odom_callback);
+  ros::Subscriber sub1 = n.subscribe("/odom_world", 10, odom_callback);
   ros::Subscriber sub2 = n.subscribe("goal", 10, goal_callback);
   ros::Subscriber sub3 = n.subscribe("traj_start_trigger", 10, traj_start_trigger_callback);
   pub1 = n.advertise<nav_msgs::Path>("waypoints", 50);

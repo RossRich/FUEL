@@ -192,15 +192,15 @@ void odomCallbck(const nav_msgs::Odometry &msg) {
   }
 }
 
-void pgTVioCallback(geometry_msgs::Pose msg) {
+// void pgTVioCallback(geometry_msgs::Pose msg) {
   // World to odom
-  Eigen::Quaterniond q = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
-  R_loop = q.toRotationMatrix();
-  T_loop << msg.position.x, msg.position.y, msg.position.z;
+  // Eigen::Quaterniond q = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
+  // R_loop = q.toRotationMatrix();
+  // T_loop << msg.position.x, msg.position.y, msg.position.z;
 
   // cout << "R_loop: " << R_loop << endl;
   // cout << "T_loop: " << T_loop << endl;
-}
+// }
 
 void visCallback(const ros::TimerEvent &e) {
   // Draw the executed traj (desired state)
@@ -451,8 +451,8 @@ int main(int argc, char **argv) {
   ros::NodeHandle node;
   ros::NodeHandle nh("~");
 
-  nh.param("enable_viz", is_visualization_on, true);
-  nh.param("pub_traj_id", pub_traj_id_, -1);
+  nh.param("enable_viz", is_visualization_on, false);
+  nh.param("pub_traj_id", pub_traj_id_, 0);
   nh.param("fsm/replan_time", replan_time_, 0.1);
   nh.param("loop_correction/isLoopCorrection", isLoopCorrection, false);
 
@@ -461,15 +461,15 @@ int main(int argc, char **argv) {
   nh.param("traj_server/init_y", init_pos[1], 0.0);
   nh.param("traj_server/init_z", init_pos[2], 0.0);
 
-  ros::Subscriber bspline_sub = node.subscribe("planning/bspline", 10, bsplineCallback);
-  ros::Subscriber replan_sub = node.subscribe("planning/replan", 10, replanCallback);
-  ros::Subscriber new_sub = node.subscribe("planning/new", 10, newCallback);
+  ros::Subscriber bspline_sub = node.subscribe("/planning/bspline", 10, bsplineCallback);
+  ros::Subscriber replan_sub = node.subscribe("/planning/replan", 10, replanCallback);
+  ros::Subscriber new_sub = node.subscribe("/planning/new", 10, newCallback);
   ros::Subscriber odom_sub = node.subscribe("/odom_world", 50, odomCallbck);
-  ros::Subscriber pg_T_vio_sub = node.subscribe("/loop_fusion/pg_T_vio", 10, pgTVioCallback);
+  // ros::Subscriber pg_T_vio_sub = node.subscribe("/planning/loop_fusion/pg_T_vio", 10, pgTVioCallback);
 
-  cmd_vis_pub = node.advertise<visualization_msgs::Marker>("planning/position_cmd_vis", 10);
-  pos_cmd_pub = node.advertise<planner_msgs::PositionCommand>("/position_cmd", 50);
-  traj_pub = node.advertise<visualization_msgs::Marker>("planning/travel_traj", 10);
+  cmd_vis_pub = nh.advertise<visualization_msgs::Marker>("planning_vis/position_cmd_vis", 10);
+  traj_pub = nh.advertise<visualization_msgs::Marker>("planning_vis/travel_traj", 10);
+  pos_cmd_pub = nh.advertise<planner_msgs::PositionCommand>("/position_cmd", 50);
 
   ros::Timer cmd_timer = node.createTimer(ros::Duration(0.01), cmdCallback);
 
