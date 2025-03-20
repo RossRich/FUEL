@@ -177,19 +177,19 @@ void replanCallback(std_msgs::Empty msg) {
 void newCallback(std_msgs::Empty msg) {
   // Clear the executed traj data
   traj_cmd_.clear();
-  traj_real_.clear();
+  // traj_real_.clear();
 }
 
 void odomCallbck(const nav_msgs::Odometry &msg) {
-  if (msg.child_frame_id == "X" || msg.child_frame_id == "O") return;
+  // if (msg.child_frame_id == "X" || msg.child_frame_id == "O") return;
   odom = msg;
-  traj_real_.push_back(Eigen::Vector3d(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z));
+  // traj_real_.push_back(Eigen::Vector3d(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z));
 
-  if (traj_real_.size() > 1000) {
+  // if (traj_real_.size() > 1000) {
     // traj_real_.erase(traj_real_.begin(), traj_real_.begin() + 5000);
-    traj_real_.insert(traj_real_.begin(), traj_real_.begin() + 500, traj_real_.end());
-    traj_real_.erase(traj_real_.begin() + 500, traj_real_.end());
-  }
+    // traj_real_.insert(traj_real_.begin(), traj_real_.begin() + 500, traj_real_.end());
+    // traj_real_.erase(traj_real_.begin() + 500, traj_real_.end());
+  // }
 }
 
 // void pgTVioCallback(geometry_msgs::Pose msg) {
@@ -467,13 +467,13 @@ int main(int argc, char **argv) {
   ros::Subscriber odom_sub = node.subscribe("/odom_world", 50, odomCallbck);
   // ros::Subscriber pg_T_vio_sub = node.subscribe("/planning/loop_fusion/pg_T_vio", 10, pgTVioCallback);
 
-  cmd_vis_pub = nh.advertise<visualization_msgs::Marker>("planning_vis/position_cmd_vis", 10);
-  traj_pub = nh.advertise<visualization_msgs::Marker>("planning_vis/travel_traj", 10);
+  // cmd_vis_pub = nh.advertise<visualization_msgs::Marker>("planning_vis/position_cmd_vis", 10);
+  // traj_pub = nh.advertise<visualization_msgs::Marker>("planning_vis/travel_traj", 10);
   pos_cmd_pub = nh.advertise<planner_msgs::PositionCommand>("/position_cmd", 50);
 
   ros::Timer cmd_timer = node.createTimer(ros::Duration(0.01), cmdCallback);
 
-  if (is_visualization_on) ros::Timer vis_timer = node.createTimer(ros::Duration(0.15), visCallback);
+  // if (is_visualization_on) ros::Timer vis_timer = node.createTimer(ros::Duration(0.15), visCallback);
 
   ROS_WARN("[Traj server]: init...");
   ros::Duration(1.0).sleep();

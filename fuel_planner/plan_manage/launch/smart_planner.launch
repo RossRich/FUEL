@@ -64,7 +64,7 @@
     <remap from="/planning/new"     to="planning/new"/>
     <remap from="/planning/bspline" to="planning/bspline"/>
 
-    <param name="enable_viz"  value="$(arg enable_viz)"/>
+    <param name="enable_viz"  value="false"/>
   </node>
 
   <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="$(arg log_output)">

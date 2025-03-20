@@ -16,8 +16,8 @@ using namespace std;
 using bfmt = boost::format;
 
 ros::Publisher pub1;
-ros::Publisher pub2;
-ros::Publisher pub3;
+// ros::Publisher pub2;
+// ros::Publisher pub3;
 string waypoint_type = string("manual");
 bool is_odom_ready;
 nav_msgs::Odometry odom;
@@ -98,7 +98,9 @@ void publish_waypoints() {
   waypoints.poses.clear();
 }
 
+//< удалить
 void publish_waypoints_vis() {
+  return;
   nav_msgs::Path wp_vis = waypoints;
   geometry_msgs::PoseArray poseArray;
   poseArray.header.frame_id = std::string("world");
@@ -115,14 +117,14 @@ void publish_waypoints_vis() {
     p = it->pose;
     poseArray.poses.push_back(p);
   }
-  pub2.publish(poseArray);
+  // pub2.publish(poseArray);
 }
 
 void odom_callback(const nav_msgs::Odometry::ConstPtr &msg) {
   is_odom_ready = true;
   odom = *msg;
 
-  if (waypointSegments.size()) {
+  /* if (waypointSegments.size()) {
     ros::Time expected_time = waypointSegments.front().header.stamp;
     if (odom.header.stamp >= expected_time) {
       waypoints = waypointSegments.front();
@@ -142,7 +144,7 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr &msg) {
 
       waypointSegments.pop_front();
     }
-  }
+  } */
 }
 
 void goal_callback(const geometry_msgs::PoseStamped::ConstPtr &msg) {
@@ -235,8 +237,6 @@ void traj_start_trigger_callback(const geometry_msgs::PoseStamped &msg) {
 
     rot += step;
 
-    std::cout << "rot: " << rot << std::endl;
-
     n.param("point_dist", dist, 0.5f);
     n.param("size_x", size_x, 5.f);
     n.param("size_y", size_y, 5.f);
@@ -272,10 +272,10 @@ int main(int argc, char **argv) {
   ros::NodeHandle n("~");
   n.param("waypoint_type", waypoint_type, string("manual"));
   ros::Subscriber sub1 = n.subscribe("/odom_world", 10, odom_callback);
-  ros::Subscriber sub2 = n.subscribe("goal", 10, goal_callback);
+  // ros::Subscriber sub2 = n.subscribe("goal", 10, goal_callback);
   ros::Subscriber sub3 = n.subscribe("traj_start_trigger", 10, traj_start_trigger_callback);
-  pub1 = n.advertise<nav_msgs::Path>("waypoints", 50);
-  pub2 = n.advertise<geometry_msgs::PoseArray>("waypoints_vis", 10);
+  pub1 = n.advertise<nav_msgs::Path>("waypoints", 10);
+  // pub2 = n.advertise<geometry_msgs::PoseArray>("waypoints_vis", 10);
 
   trigged_time = ros::Time(0);
 
