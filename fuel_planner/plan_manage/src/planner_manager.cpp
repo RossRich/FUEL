@@ -613,11 +613,8 @@ void FastPlannerManager::selectBestTraj(NonUniformBspline &traj) {
 void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
   ROS_DEBUG_STREAM(_label << "Refine traj");
 
-  int cost_function = BsplineOptimizer::NORMAL_PHASE | BsplineOptimizer::SWARM;
+  int cost_function = BsplineOptimizer::NORMAL_PHASE;
   if (pp_.min_time_) cost_function |= BsplineOptimizer::MINTIME;
-
-  std::vector<NonUniformBspline> agents_trajs;
-  agents_data.getValidTrajs(agents_trajs);
 
   // ViewConstraint view_cons;
   // visib_util_->calcViewConstraint(best_traj, view_cons);
@@ -628,15 +625,23 @@ void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
   //   bspline_optimizers_[0]->setViewConstraint(view_cons);
   // }
 
-  // Refine selected best traj
+
   Eigen::MatrixXd ctrl_pts = best_traj.getControlPoint();
   double dt = best_traj.getKnotSpan();
   vector<Eigen::Vector3d> start1, end1; //< позиция, скорость (до оптимизации)
   /* начало траектории (позиция, скорость) */
   /* конец траектории (позиция) */
   best_traj.getBoundaryStates(2, 2, start1, end1);
-  if (agents_trajs.size()) bspline_optimizers_[0]->setSwarmTrajs(agents_trajs);
   bspline_optimizers_[0]->setBoundaryStates(start1, end1);
+
+  std::vector<NonUniformBspline> agents_trajs;
+  agents_data.getValidTrajs(agents_trajs);
+
+  if (agents_trajs.size()) {
+    cost_function |= BsplineOptimizer::SWARM;
+    bspline_optimizers_[0]->setSwarmTrajs(agents_trajs);
+  }
+
   bspline_optimizers_[0]->optimize(ctrl_pts, dt, cost_function, 2, 2);
   best_traj.setUniformBspline(ctrl_pts, pp_.bspline_degree_, dt);
 

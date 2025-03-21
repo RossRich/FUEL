@@ -298,14 +298,11 @@ public:
     receive_flags = vector<bool>(drone_num, false);
   }
 
-  void getValidTrajs(vector<NonUniformBspline> &trajs) {
+  void getValidTrajs(vector<NonUniformBspline> &valid_trajs) {
     // Retrieve only valid trajs
-    trajs.clear();
-    for (size_t i = 0; i < drone_num; ++i) {
-      if (receive_flags[i] == true) {
-        trajs.push_back(trajs[i]);
-      }
-    }
+    valid_trajs.clear();
+    for (size_t i = 0; i < drone_num; ++i)
+      if (receive_flags[i] == true) valid_trajs.push_back(trajs[i]);
   }
 
   void resetReceiveFlag() { std::fill(receive_flags.begin(), receive_flags.end(), false); }
