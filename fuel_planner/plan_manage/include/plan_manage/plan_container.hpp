@@ -286,6 +286,35 @@ public:
   }
 };
 
+class AgentsData {
+public:
+  AgentsData() {}
+  ~AgentsData() {}
+
+  void init(int id, int num) {
+    drone_id = id;
+    drone_num = num;
+    trajs.resize(drone_num);
+    receive_flags = vector<bool>(drone_num, false);
+  }
+
+  void getValidTrajs(vector<NonUniformBspline> &trajs) {
+    // Retrieve only valid trajs
+    trajs.clear();
+    for (size_t i = 0; i < drone_num; ++i) {
+      if (receive_flags[i] == true) {
+        trajs.push_back(trajs[i]);
+      }
+    }
+  }
+
+  void resetReceiveFlag() { std::fill(receive_flags.begin(), receive_flags.end(), false); }
+
+  int drone_id;
+  int drone_num;
+  vector<NonUniformBspline> trajs;
+  vector<bool> receive_flags;
+};
 } // namespace fast_planner
 
 #endif

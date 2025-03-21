@@ -1,4 +1,3 @@
-// #include <fstream>
 #include <plan_env/raycast.h>
 #include <plan_env/sdf_map.h>
 #include <plan_manage/planner_manager.h>
@@ -14,7 +13,7 @@ namespace fast_planner {
 
 FastPlannerManager::FastPlannerManager() {}
 
-FastPlannerManager::~FastPlannerManager() { std::cout << _label << "des manager" << std::endl; }
+FastPlannerManager::~FastPlannerManager() {}
 
 void FastPlannerManager::initPlanModules(ros::NodeHandle &nh) {
   /* read algorithm parameters */
@@ -464,7 +463,7 @@ bool FastPlannerManager::planGlobalTraj3(const point3d_t &start_pos, const Eigen
     ROS_WARN_STREAM(_label << "Failed to generate global trajectory");
 
   return global_path_res;
-} // namespace fast_planner
+}
 
 bool FastPlannerManager::planLocaTraj(double start_time, const ros::Time &time_now) {
   auto glob_end = global_data_.global_start_time_ + ros::Duration(global_data_.global_duration_);
@@ -613,10 +612,12 @@ void FastPlannerManager::selectBestTraj(NonUniformBspline &traj) {
  */
 void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
   ROS_DEBUG_STREAM(_label << "Refine traj");
-  // plan_data_.no_visib_traj_ = best_traj; //< ???
 
-  int cost_function = BsplineOptimizer::NORMAL_PHASE;
+  int cost_function = BsplineOptimizer::NORMAL_PHASE | BsplineOptimizer::SWARM;
   if (pp_.min_time_) cost_function |= BsplineOptimizer::MINTIME;
+
+  std::vector<NonUniformBspline> agents_trajs;
+  agents_data.getValidTrajs(agents_trajs);
 
   // ViewConstraint view_cons;
   // visib_util_->calcViewConstraint(best_traj, view_cons);
@@ -634,13 +635,13 @@ void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
   /* начало траектории (позиция, скорость) */
   /* конец траектории (позиция) */
   best_traj.getBoundaryStates(2, 2, start1, end1);
-
+  if (agents_trajs.size()) bspline_optimizers_[0]->setSwarmTrajs(agents_trajs);
   bspline_optimizers_[0]->setBoundaryStates(start1, end1);
   bspline_optimizers_[0]->optimize(ctrl_pts, dt, cost_function, 2, 2);
   best_traj.setUniformBspline(ctrl_pts, pp_.bspline_degree_, dt);
 
-  vector<Eigen::Vector3d> start2, end2; //< позиция, скорость (после оптимизации)
-  best_traj.getBoundaryStates(2, 2, start2, end2);
+  // vector<Eigen::Vector3d> start2, end2; //< позиция, скорость (после оптимизации)
+  // best_traj.getBoundaryStates(2, 2, start2, end2);
 
   /*
    * x, y, z
@@ -648,7 +649,7 @@ void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
    * dif vel
    * dif acc
    */
-  const char title[][3] = {{'p', ':', '\0'}, {'v', ':', '\0'}, {'a', ':', '\0'}};
+  /* const char title[][3] = {{'p', ':', '\0'}, {'v', ':', '\0'}, {'a', ':', '\0'}};
   auto min_len = min(start1.size(), start2.size());
   ROS_DEBUG_STREAM(_label << "start dif:");
   for (size_t i = 0; i < min_len; ++i) {
@@ -661,7 +662,7 @@ void FastPlannerManager::refineTraj(NonUniformBspline &best_traj) {
   for (size_t i = 0; i < min_len; ++i) {
     auto dif_enf = (end2[i] - end1[i]).norm();
     ROS_DEBUG_STREAM(title[i] << std::fixed << std::setprecision(3) << dif_enf);
-  }
+  } */
 }
 
 void FastPlannerManager::updateTrajInfo() {
@@ -885,6 +886,27 @@ bool FastPlannerManager::checkTrajCollision(double &distance) {
   return res;
 }
 
+bool FastPlannerManager::checkAgentCollision(int agent_id) {
+  // Check collision with another drone's trajectory
+  if (agents_data.receive_flags[agent_id - 1] == false) return true;
+
+  auto &traj = agents_data.trajs[agent_id - 1];
+
+  double self_t = 0.02 + (ros::Time::now() - local_data_.start_time_).toSec();
+  double other_t = 0.02 + ros::Time::now().toSec() - traj.start_time_;
+
+  while (self_t < local_data_.duration_ && self_t > 0 && other_t < traj.duration_) {
+    auto self_pos = local_data_.position_traj_.evaluateDeBoorT(self_t);
+    auto other_pos = traj.evaluateDeBoorT(other_t);
+    // if ((self_pos - other_pos).norm() < 0.6) return false;
+    // if ((self_pos - other_pos).head<2>().norm() < 0.2) return false;
+    if ((self_pos - other_pos).head<2>().norm() < 0.5) return false;
+    self_t += 0.02;
+    other_t += 0.02;
+  }
+  return true;
+}
+
 bool FastPlannerManager::fixPointInCollision(Eigen::Vector3d &point) {
   // try to find a max distance goal around
   // bool new_goal = false;
@@ -933,7 +955,7 @@ bool FastPlannerManager::fixPointInCollision2(const Eigen::Quaterniond &orientat
     for (double a = 0; a < 2.0 * M_PI; a += 0.2) {
       rotation = Eigen::AngleAxisd(a, Vector3d::UnitX());            //< матрица вращения
       tmp_pt.block<3, 1>(0, 0) = rotation * (Vector3d::UnitY() * r); //< вращаем точку
-      tmp_pt = trs * tmp_pt; //< переносим точку в нужную позицию
+      tmp_pt = trs * tmp_pt;                                         //< переносим точку в нужную позицию
       point3d_t new_pt = tmp_pt.head<3>();
       auto min_z = std::max(radius, new_pt.z());      //< ограничиваем низ
       new_pt.z() = std::min(min_z, new_pt.z() + 1.0); //< ограничиваем верх
@@ -951,6 +973,10 @@ bool FastPlannerManager::fixPointInCollision2(const Eigen::Quaterniond &orientat
   return false;
 }
 
+/**
+ * lannerManager::planYaw(Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)
+ * Segmentation fault (Address not mapped to object [0xffffffffffffffe8])
+ */
 void FastPlannerManager::planYaw(const Eigen::Vector3d &start_yaw) {
   ROS_DEBUG_STREAM(_label << "Start yaw plan");
   auto t1 = ros::Time::now();

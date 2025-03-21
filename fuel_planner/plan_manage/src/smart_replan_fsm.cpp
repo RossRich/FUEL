@@ -2,7 +2,6 @@
 
 namespace fast_planner {
 void SmartReplanFsm::init(ros::NodeHandle &nh) {
-  current_wp_ = 0;
   have_target_ = false;
   have_odom_ = false;
   collide_ = false;
@@ -13,13 +12,18 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   /*  fsm param  */
   nh.param("fsm/act_map", act_map_, false);
   nh.param("fsm/enable_viz", _enable_viz, false);
-
   _emergency_stop_dist = 1.2;
 
   /* initialize main modules */
   planner_manager_.reset(new FastPlannerManager);
   planner_manager_->initPlanModules(nh);
   visualization_.reset(new PlanningVisualization(nh));
+
+  auto &ad = planner_manager_->agents_data;
+  ad.init(0, 5);
+  ros::NodeHandle glob;
+  glob.param("isotope_id", ad.drone_id, 0);
+  ROS_ASSERT_MSG(ad.drone_id > 0, "Invalid agent id. %i <= 0", ad.drone_id);
 
   /* callback */
   exec_timer_ = nh.createTimer(ros::Duration(0.01), &SmartReplanFsm::execFSMCallback, this);
@@ -28,14 +32,16 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
 
   _stop_srv = nh.advertiseService("/planning/stop", &SmartReplanFsm::stop_srv, this);
 
-  waypoint_sub_ = nh.subscribe("/waypoint_generator/waypoint", 1, &SmartReplanFsm::waypointCallback, this);
-  path_sub_ = nh.subscribe("/waypoint_generator/path", 1, &SmartReplanFsm::pathCallback, this);
-  odom_sub_ = nh.subscribe("/odom_world", 1, &SmartReplanFsm::odometryCallback, this);
+  _agent_traj_sub = nh.subscribe("/planning/agent_traj_sub", 50, &SmartReplanFsm::agent_traj_callback, this);
+  waypoint_sub_ = nh.subscribe("/planning/waypoint", 1, &SmartReplanFsm::waypointCallback, this);
+  path_sub_ = nh.subscribe("/planning/path", 1, &SmartReplanFsm::pathCallback, this);
+  odom_sub_ = nh.subscribe("/planning/odom_world", 1, &SmartReplanFsm::odometryCallback, this);
 
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 20);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 20);
   bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 20);
   _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
+  _agent_traj_pub = nh.advertise<planner_msgs::AgentTraj>("/planning/agent_traj_pub", 50);
 }
 
 bool SmartReplanFsm::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res) {
@@ -43,6 +49,36 @@ bool SmartReplanFsm::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerRe
   res.message = "ok";
   _is_stop_req = true;
   return true;
+}
+
+void SmartReplanFsm::agent_traj_callback(const planner_msgs::AgentTrajConstPtr &agent_msg) {
+  auto &agents_data = planner_manager_->agents_data; 
+
+  if (agent_msg->agent_id == agents_data.drone_id) return;
+
+  ROS_DEBUG_STREAM(_label << "new traj from " << agent_msg->agent_id);
+
+  auto &_agent_traj = agent_msg->traj;
+  Eigen::MatrixXd pos_pts(_agent_traj.pos_pts.size(), 3);
+  for (size_t i = 0; i < _agent_traj.pos_pts.size(); ++i) {
+    pos_pts(i, 0) = _agent_traj.pos_pts[i].x;
+    pos_pts(i, 1) = _agent_traj.pos_pts[i].y;
+    pos_pts(i, 2) = _agent_traj.pos_pts[i].z;
+  }
+
+  auto &at = agents_data.trajs[agent_msg->agent_id - 1];
+  at.setUniformBspline(pos_pts, _agent_traj.order, _agent_traj.knot_span);
+  at.start_time_ = _agent_traj.start_time.toSec();
+  agents_data.receive_flags[agent_msg->agent_id - 1] = true;
+
+  if (exec_state_ == FSM_EXEC_STATE::EXEC_TRAJ) {
+    if (not planner_manager_->checkAgentCollision(agent_msg->agent_id)) {
+      ROS_WARN("%sUnsafe fligth paths for %i and %i", _label, agents_data.drone_id, agent_msg->agent_id);
+      changeFSMExecState(FSM_EXEC_STATE::REPLAN_TRAJ, "CHECKING TRAJ");
+    }
+  }
+
+  visualization_->drawBspline(at, 0.05, {0.5, 0.5, 0.5, 0.8});
 }
 
 void SmartReplanFsm::waypointCallback(const geometry_msgs::PoseStampedPtr &pose) {
@@ -289,108 +325,51 @@ bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
 
   pm.refine_local_traj(time_now, collide_);
 
-  if (!act_map_) {
+  if (!act_map_)
     pm.planYaw(start_yaw_);
-  } else {
+  else
     pm.planYawActMap(start_yaw_);
-  }
 
   double dist = 0.0;
-  if (step == PLAN_STEP::FULL and not pm.checkTrajCollision(dist) and dist < _emergency_stop_dist) {
-    return false;
-  }
+  if (step == PLAN_STEP::FULL and not pm.checkTrajCollision(dist) and dist < _emergency_stop_dist) return false;
 
   auto &local_traj_data = pm.local_data_;
   /* publish newest trajectory to server */
 
   /* publish traj */
   planner_msgs::Bspline bspline;
-  bspline.order = planner_manager_->pp_.bspline_degree_;
-  bspline.start_time = local_traj_data.start_time_;
+  bspline.order = pm.pp_.bspline_degree_;
   bspline.traj_id = local_traj_data.traj_id_;
+  bspline.start_time = local_traj_data.start_time_;
+  bspline.knot_span = local_traj_data.position_traj_.getKnotSpan();
+  
+  auto &_traj = local_traj_data.position_traj_;
 
-  Eigen::MatrixXd pos_pts = local_traj_data.position_traj_.getControlPoint();
-
-  for (int i = 0; i < pos_pts.rows(); ++i) {
-    geometry_msgs::Point pt;
-    pt.x = pos_pts(i, 0);
-    pt.y = pos_pts(i, 1);
-    pt.z = pos_pts(i, 2);
-    bspline.pos_pts.push_back(pt);
+  auto &ctr_pts = _traj.getControlPoint();
+  for (size_t i = 0; i < ctr_pts.rows(); ++i) {
+    geometry_msgs::Point _pt;
+    _pt.x = ctr_pts(i, 0);
+    _pt.y = ctr_pts(i, 1);
+    _pt.z = ctr_pts(i, 2);
+    bspline.pos_pts.emplace_back(std::move(_pt));
   }
 
-  Eigen::VectorXd knots = local_traj_data.position_traj_.getKnot();
-  for (int i = 0; i < knots.rows(); ++i) {
+  auto &knots = _traj.getKnot();
+  for (size_t i = 0; i < knots.rows(); ++i)
     bspline.knots.push_back(knots(i));
-  }
 
-  Eigen::MatrixXd yaw_pts = local_traj_data.yaw_traj_.getControlPoint();
-  for (int i = 0; i < yaw_pts.rows(); ++i) {
-    double yaw = yaw_pts(i, 0);
-    bspline.yaw_pts.push_back(yaw);
-  }
+  auto &yaw_pts = local_traj_data.yaw_traj_.getControlPoint();
+  for (size_t i = 0; i < yaw_pts.rows(); ++i)
+    bspline.yaw_pts.push_back(yaw_pts(i));
+
   bspline.yaw_dt = local_traj_data.yaw_traj_.getKnotSpan();
+
   bspline_pub_.publish(bspline);
+  planner_msgs::AgentTraj at;
+  at.agent_id = planner_manager_->agents_data.drone_id;
+  at.traj = bspline;
 
-  if (_enable_viz) visualization();
-
-  return true;
-}
-
-bool SmartReplanFsm::callTopologicalTraj(PLAN_STEP step) {
-  if (step == PLAN_STEP::FULL)
-    if (not planner_manager_->planGlobalTraj(start_pt_)) return false;
-
-  auto &glob_data = planner_manager_->global_data_;
-  auto time_now = ros::Time::now();
-  double local_traj_start = (time_now - glob_data.global_start_time_).toSec(); //< начало локальной траектории на глобальной
-  if (not planner_manager_->planLocaTraj(local_traj_start, time_now)) return false;
-  if (not planner_manager_->topoReplanLocalTraj(time_now, collide_)) return false;
-  auto &local_traj = planner_manager_->local_data_;
-  // double local_traj_end = local_traj_start + local_traj.duration_;
-
-  // повторно считает производные локальной траектории
-  // planner_manager_->global_data_.setLocalTraj(local_data.position_traj_, local_traj_start, local_traj_end,
-  // local_data.duration_);
-
-  if (!act_map_) {
-    // Eigen::Vector3d rot_x = odom_orient_.toRotationMatrix().block(0, 0, 3, 1);
-    // planner_manager_->planYawExplore(start_yaw_, start_yaw_[0], false, 1);
-    planner_manager_->planYaw(start_yaw_);
-  } else {
-    planner_manager_->planYawActMap(start_yaw_);
-  }
-
-  /* publish newest trajectory to server */
-
-  /* publish traj */
-  planner_msgs::Bspline bspline;
-  bspline.order = planner_manager_->pp_.bspline_degree_;
-  bspline.start_time = local_traj.start_time_;
-  bspline.traj_id = local_traj.traj_id_;
-
-  Eigen::MatrixXd pos_pts = local_traj.position_traj_.getControlPoint();
-
-  for (int i = 0; i < pos_pts.rows(); ++i) {
-    geometry_msgs::Point pt;
-    pt.x = pos_pts(i, 0);
-    pt.y = pos_pts(i, 1);
-    pt.z = pos_pts(i, 2);
-    bspline.pos_pts.push_back(pt);
-  }
-
-  Eigen::VectorXd knots = local_traj.position_traj_.getKnot();
-  for (int i = 0; i < knots.rows(); ++i) {
-    bspline.knots.push_back(knots(i));
-  }
-
-  Eigen::MatrixXd yaw_pts = local_traj.yaw_traj_.getControlPoint();
-  for (int i = 0; i < yaw_pts.rows(); ++i) {
-    double yaw = yaw_pts(i, 0);
-    bspline.yaw_pts.push_back(yaw);
-  }
-  bspline.yaw_dt = local_traj.yaw_traj_.getKnotSpan();
-  bspline_pub_.publish(bspline);
+  _agent_traj_pub.publish(at);
 
   if (_enable_viz) visualization();
 
@@ -415,16 +394,16 @@ void SmartReplanFsm::visualization() {
   visualization_->drawPolynomialTraj(global_data.global_traj_, 0.05, poli_traj_color);
   visualization_->drawBspline(local_traj->position_traj_, 0.05, spline_traj_color, true, 0.1, ctrl_pt_color);
 
-  const auto color1 = Eigen::Vector4d(210 / 255.0, 0 / 255.0, 98 / 255.0, 1);
-  const auto color2 = Eigen::Vector4d(214 / 255.0, 88 / 255.0, 159 / 255.0, 1);
-  const auto color3 = Eigen::Vector4d(196 / 255.0, 228 / 255.0, 255 / 255.0, 1);
+  // const auto color1 = Eigen::Vector4d(210 / 255.0, 0 / 255.0, 98 / 255.0, 1);
+  // const auto color2 = Eigen::Vector4d(214 / 255.0, 88 / 255.0, 159 / 255.0, 1);
+  // const auto color3 = Eigen::Vector4d(196 / 255.0, 228 / 255.0, 255 / 255.0, 1);
 
-  visualization_->drawTopoGraph(plan_data.topo_graph_, 0.08, 0.05, color1, color2, color3);
+  // visualization_->drawTopoGraph(plan_data.topo_graph_, 0.08, 0.05, color1, color2, color3);
 
-  visualization_->drawBsplinesPhase2(plan_data.topo_traj_pos2_, 0.08);
+  // visualization_->drawBsplinesPhase2(plan_data.topo_traj_pos2_, 0.08);
   // visualization_->drawViewConstraint(plan_data.view_cons_);
 
-  visualization_->drawYawTraj(local_traj->position_traj_, local_traj->yaw_traj_, plan_data.dt_yaw_);
+  // visualization_->drawYawTraj(local_traj->position_traj_, local_traj->yaw_traj_, plan_data.dt_yaw_);
 }
 
 } // namespace fast_planner

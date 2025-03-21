@@ -53,6 +53,7 @@
   <exec_depend>active_perception</exec_depend>
   <exec_depend>traj_utils</exec_depend>
   <exec_depend>planner_msgs</exec_depend>
+  <exec_depend>waypoint_generator</exec_depend>
 
   <export> </export>
 </package>

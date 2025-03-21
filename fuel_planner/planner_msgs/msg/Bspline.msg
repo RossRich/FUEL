@@ -2,6 +2,7 @@ int32 order
 int64 traj_id
 time start_time
 
+float64 knot_span
 float64[] knots
 geometry_msgs/Point[] pos_pts
 

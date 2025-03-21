@@ -58,7 +58,7 @@
 
   <!-- trajectory server -->
   <node pkg="plan_manage" name="traj_server" type="traj_server" output="$(arg log_output)">
-    <remap from="/position_cmd" to="planning/pos_cmd"/>
+    <remap from="/position_cmd"     to="planning/pos_cmd"/>
     <remap from="/odom_world"       to="$(arg odom_topic)"/>
     <remap from="/planning/replan"  to="planning/replan"/>
     <remap from="/planning/new"     to="planning/new"/>

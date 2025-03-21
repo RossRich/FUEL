@@ -83,6 +83,7 @@ public:
   bool fixPointInCollision(Eigen::Vector3d &point_in_collision);
   bool fixPointInCollision2(const Eigen::Quaterniond &orientation, point3d_t &point_in_collision);
   bool checkTrajCollision(double &distance);
+  bool checkAgentCollision(int agent_id);
   void findCollisionRange(vector<Eigen::Vector3d> &colli_start, vector<Eigen::Vector3d> &colli_end,
                           vector<Eigen::Vector3d> &start_pts, vector<Eigen::Vector3d> &end_pts);
   void calcNextYaw(const double &last_yaw, double &yaw);
@@ -95,6 +96,8 @@ public:
   unique_ptr<Astar> path_finder_;
   unique_ptr<TopologyPRM> topo_prm_;
   std::unique_ptr<PlanningVisualization> _visualisation;
+
+  AgentsData agents_data;
 
 private:
   /* main planning algorithms & modules */

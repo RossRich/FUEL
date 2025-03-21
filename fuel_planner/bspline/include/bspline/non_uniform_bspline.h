@@ -13,24 +13,24 @@ namespace fast_planner {
 class NonUniformBspline {
 public:
   NonUniformBspline();
-  NonUniformBspline(const Eigen::MatrixXd& points, const int& order, const double& interval);
+  NonUniformBspline(const Eigen::MatrixXd& points, int order, double interval);
   ~NonUniformBspline();
 
   // initialize as an uniform B-spline
-  void setUniformBspline(const Eigen::MatrixXd& points, const int& order, const double& interval);
+  void setUniformBspline(const Eigen::MatrixXd& points, int order, double interval);
 
   // get / set basic bspline info
 
   void setKnot(const Eigen::VectorXd& knot);
-  Eigen::VectorXd getKnot();
+  const Eigen::VectorXd& getKnot();
   const Eigen::MatrixXd& getControlPoint();
   double getKnotSpan();
   void getTimeSpan(double& um, double& um_p);
 
   // compute position / derivative
 
-  Eigen::VectorXd evaluateDeBoor(const double& u);   // use u \in [up, u_mp]
-  Eigen::VectorXd evaluateDeBoorT(const double& t);  // use t \in [0, duration]
+  Eigen::VectorXd evaluateDeBoor(double u);   // use u \in [up, u_mp]
+  Eigen::VectorXd evaluateDeBoorT(double t);  // use t \in [0, duration]
   void computeDerivatives(const int& k, vector<NonUniformBspline>& ders);
   NonUniformBspline getDerivative();
   void getBoundaryStates(const int& ks, const int& ke, vector<Eigen::Vector3d>& start,

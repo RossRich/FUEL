@@ -2,8 +2,7 @@
 #include <ros/ros.h>
 
 namespace fast_planner {
-NonUniformBspline::NonUniformBspline(const Eigen::MatrixXd& points, const int& order,
-                                     const double& interval) {
+NonUniformBspline::NonUniformBspline(const Eigen::MatrixXd& points, int order, double interval) {
   setUniformBspline(points, order, interval);
 }
 
@@ -13,8 +12,7 @@ NonUniformBspline::NonUniformBspline() {
 NonUniformBspline::~NonUniformBspline() {
 }
 
-void NonUniformBspline::setUniformBspline(const Eigen::MatrixXd& points, const int& order,
-                                          const double& interval) {
+void NonUniformBspline::setUniformBspline(const Eigen::MatrixXd& points, int order, double interval) {
   control_points_ = points;
   p_ = order;
   knot_span_ = interval;
@@ -37,7 +35,7 @@ void NonUniformBspline::setKnot(const Eigen::VectorXd& knot) {
   duration_ = getTimeSum();
 }
 
-Eigen::VectorXd NonUniformBspline::getKnot() {
+const Eigen::VectorXd& NonUniformBspline::getKnot() {
   return this->u_;
 }
 
@@ -50,7 +48,7 @@ const Eigen::MatrixXd& NonUniformBspline::getControlPoint() {
   return control_points_;
 }
 
-Eigen::VectorXd NonUniformBspline::evaluateDeBoor(const double& u) {
+Eigen::VectorXd NonUniformBspline::evaluateDeBoor(double u) {
   double ub = min(max(u_(p_), u), u_(m_ - p_));
 
   // Determine which [uk,uk+1] does u lay in
@@ -72,7 +70,7 @@ Eigen::VectorXd NonUniformBspline::evaluateDeBoor(const double& u) {
   return d[p_];
 }
 
-Eigen::VectorXd NonUniformBspline::evaluateDeBoorT(const double& t) {
+Eigen::VectorXd NonUniformBspline::evaluateDeBoorT(double t) {
   return evaluateDeBoor(t + u_(p_));
 }
 

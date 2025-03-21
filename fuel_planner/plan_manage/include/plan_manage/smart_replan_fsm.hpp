@@ -3,24 +3,22 @@
 
 #include <Eigen/Eigen>
 #include <algorithm>
+#include <bspline_opt/bspline_optimizer.h>
 #include <iostream>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
-#include <ros/ros.h>
-#include <std_msgs/Empty.h>
-#include <vector>
-#include <visualization_msgs/Marker.h>
-
-#include <planner_msgs/Bspline.h>
-#include <bspline_opt/bspline_optimizer.h>
 #include <path_searching/kinodynamic_astar.h>
 #include <plan_env/edt_environment.h>
 #include <plan_env/obj_predictor.h>
 #include <plan_manage/planner_manager.h>
+#include <planner_msgs/AgentTraj.h>
+#include <planner_msgs/Bspline.h>
+#include <ros/ros.h>
+#include <std_msgs/Empty.h>
 #include <std_srvs/Trigger.h>
 #include <traj_utils/planning_visualization.h>
-
-using std::vector;
+#include <vector>
+#include <visualization_msgs/Marker.h>
 
 namespace fast_planner {
 class SmartReplanFsm {
@@ -47,6 +45,7 @@ private:
   /* planning data */
   bool have_target_, have_odom_, collide_;
   bool _is_stop_req;
+  
   FSM_EXEC_STATE exec_state_;
 
   Eigen::Vector3d odom_pos_, odom_vel_; // odometry state
@@ -54,7 +53,6 @@ private:
 
   Eigen::Vector3d start_pt_, start_vel_, start_acc_, start_yaw_; // start state
   Eigen::Vector3d target_point_, end_vel_;                       // target state
-  int current_wp_;
 
   /* ROS utils */
   ros::NodeHandle node_;
@@ -65,18 +63,16 @@ private:
   ros::Subscriber waypoint_sub_;
   ros::Subscriber path_sub_;
   ros::Subscriber odom_sub_;
-  
+  ros::Subscriber _agent_traj_sub;
 
   ros::Publisher _wait_goal_pub;
   ros::Publisher new_pub_;
   ros::Publisher bspline_pub_;
   ros::Publisher replan_pub_;
+  ros::Publisher _agent_traj_pub;
 
   /* helper functions */
-  bool callTopologicalTraj(PLAN_STEP step); // topo path guided gradient-based
-                                            // optimization; 1: new, 2: replan
   bool callPathPlanner(PLAN_STEP step);
-
   void changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call);
 
   /* ROS functions */
@@ -86,6 +82,7 @@ private:
   void pathCallback(const nav_msgs::PathConstPtr &msg);
   void waypointCallback(const geometry_msgs::PoseStampedPtr &);
   void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
+  void agent_traj_callback(const planner_msgs::AgentTrajConstPtr &agent_traj);
   bool stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res);
 
   /* visualize new trajectories */
@@ -94,7 +91,6 @@ private:
 public:
   SmartReplanFsm() {}
   ~SmartReplanFsm() {}
-
   void init(ros::NodeHandle &nh);
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
