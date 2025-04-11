@@ -38,7 +38,10 @@
   <build_depend>bspline_opt</build_depend>
   <build_depend>active_perception</build_depend>
   <build_depend>traj_utils</build_depend>
+  <build_depend>hg_msgs</build_depend>
   <build_depend>planner_msgs</build_depend>
+  <build_depend>tf2</build_depend>
+  <build_depend>tf2_ros</build_depend>
 
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
@@ -52,8 +55,11 @@
   <exec_depend>bspline_opt</exec_depend>
   <exec_depend>active_perception</exec_depend>
   <exec_depend>traj_utils</exec_depend>
+  <exec_depend>hg_msgs</exec_depend>
   <exec_depend>planner_msgs</exec_depend>
   <exec_depend>waypoint_generator</exec_depend>
+  <exec_depend>tf2</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
 
   <export> </export>
 </package>

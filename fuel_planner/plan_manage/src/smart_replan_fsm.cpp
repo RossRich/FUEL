@@ -32,7 +32,8 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
 
   _stop_srv = nh.advertiseService("/planning/stop", &SmartReplanFsm::stop_srv, this);
 
-  _agent_traj_sub = nh.subscribe("/planning/agent_traj_sub", 50, &SmartReplanFsm::agent_traj_callback, this);
+  _agent_traj_sub0 = nh.subscribe("/planning/agent_traj_sub0", 50, &SmartReplanFsm::agent_traj_callback0, this);
+  _agent_traj_sub1 = nh.subscribe("/planning/agent_traj_sub1", 50, &SmartReplanFsm::agent_traj_callback1, this);
   waypoint_sub_ = nh.subscribe("/planning/waypoint", 1, &SmartReplanFsm::waypointCallback, this);
   path_sub_ = nh.subscribe("/planning/path", 1, &SmartReplanFsm::pathCallback, this);
   odom_sub_ = nh.subscribe("/planning/odom_world", 1, &SmartReplanFsm::odometryCallback, this);
@@ -41,7 +42,8 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 20);
   bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 20);
   _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
-  _agent_traj_pub = nh.advertise<planner_msgs::AgentTraj>("/planning/agent_traj_pub", 50);
+  _agent_traj_pub0 = nh.advertise<mavros_msgs::Trajectory>("/planning/agent_traj_pub0", 20);
+  _agent_traj_pub1 = nh.advertise<mavros_msgs::Tunnel>("/planning/agent_traj_pub1", 20);
 }
 
 bool SmartReplanFsm::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res) {
@@ -51,29 +53,111 @@ bool SmartReplanFsm::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerRe
   return true;
 }
 
-void SmartReplanFsm::agent_traj_callback(const planner_msgs::AgentTrajConstPtr &agent_msg) {
-  auto &agents_data = planner_manager_->agents_data; 
+void SmartReplanFsm::agent_traj_callback1(const mavros_msgs::TunnelConstPtr &tunnel_msg) {
 
-  if (agent_msg->agent_id == agents_data.drone_id) return;
+  const uint8_t NUM_PT = 9U;
+  const uint8_t agent_id = tunnel_msg->target_system;
+  auto &agents_data = planner_manager_->agents_data;
 
-  ROS_DEBUG_STREAM(_label << "new traj from " << agent_msg->agent_id);
+  struct trag_t {
+    float x[NUM_PT];
+    float y[NUM_PT];
+    float z[NUM_PT];
+    float dt;
+    uint8_t valid_pt;
+  } bspline_struct;
 
-  auto &_agent_traj = agent_msg->traj;
-  Eigen::MatrixXd pos_pts(_agent_traj.pos_pts.size(), 3);
-  for (size_t i = 0; i < _agent_traj.pos_pts.size(); ++i) {
-    pos_pts(i, 0) = _agent_traj.pos_pts[i].x;
-    pos_pts(i, 1) = _agent_traj.pos_pts[i].y;
-    pos_pts(i, 2) = _agent_traj.pos_pts[i].z;
+  uint8_t *data_arr = reinterpret_cast<uint8_t *>(&bspline_struct);
+
+  std::copy(tunnel_msg->payload.data(), tunnel_msg->payload.data() + tunnel_msg->payload_length, data_arr);
+
+  points3d_t ctrl_pts;
+  for (size_t i = 0; i < bspline_struct.valid_pt; ++i) {
+    ctrl_pts.push_back({bspline_struct.x[i], bspline_struct.y[i], bspline_struct.z[i]});
   }
 
-  auto &at = agents_data.trajs[agent_msg->agent_id - 1];
-  at.setUniformBspline(pos_pts, _agent_traj.order, _agent_traj.knot_span);
-  at.start_time_ = _agent_traj.start_time.toSec();
-  agents_data.receive_flags[agent_msg->agent_id - 1] = true;
+  if (ctrl_pts.size() < 3) return;
+
+  std::string tgt_frame("map_");
+  tgt_frame += std::to_string(agent_id);
+
+  std::string src_frame("map");
+
+  try {
+ 
+    // auto tf_stamped = _tf_buffer.lookupTransform(tgt_frame, src_frame, ros::Time(0));
+    geometry_msgs::PointStamped tmp_v = tf2::toMsg(tf2::Stamped<point3d_t>(ctrl_pts.at(0), ros::Time::now(), src_frame));
+    auto new_vector = _tf_buffer.transform(tmp_v, tgt_frame);
+    ctrl_pts.at(0).x() = new_vector.point.x;
+    ctrl_pts.at(0).y() = new_vector.point.y;
+    ctrl_pts.at(0).z() = new_vector.point.z;
+  } catch (const std::exception &e) {
+    ROS_WARN_STREAM(_label << e.what());
+    return;
+  }
+
+  Eigen::MatrixXd pos_pts(ctrl_pts.size(), 3);
+
+  for (size_t i = 0; i < ctrl_pts.size(); ++i) {
+    pos_pts(i, 0) = ctrl_pts.at(i).x();
+    pos_pts(i, 1) = ctrl_pts.at(i).y();
+    pos_pts(i, 2) = ctrl_pts.at(i).z();
+  }
+
+  auto &at = agents_data.trajs.at(agent_id - 1);
+
+  at.setUniformBspline(pos_pts, planner_manager_->pp_.bspline_degree_, bspline_struct.dt);
+  at.start_time_ = ros::Time::now().toSec();
+  agents_data.receive_flags.at(agent_id - 1) = true;
 
   if (exec_state_ == FSM_EXEC_STATE::EXEC_TRAJ) {
-    if (not planner_manager_->checkAgentCollision(agent_msg->agent_id)) {
-      ROS_WARN("%sUnsafe fligth paths for %i and %i", _label, agents_data.drone_id, agent_msg->agent_id);
+    if (not planner_manager_->checkAgentCollision(agent_id)) {
+      ROS_WARN("%sUnsafe fligth paths for %i and %i", _label, agents_data.drone_id, agent_id);
+      changeFSMExecState(FSM_EXEC_STATE::REPLAN_TRAJ, "CHECKING TRAJ");
+    }
+  }
+
+  visualization_->drawBspline(at, 0.05, {0.5, 0.5, 0.5, 0.8});
+}
+
+void SmartReplanFsm::agent_traj_callback0(const hg_msgs::IsotopeTrajectoryConstPtr &agent_msg) {
+  auto &agents_data = planner_manager_->agents_data;
+  const auto &trajectory = agent_msg->trajectory;
+  const auto &agent_id = agent_msg->sys_id;
+
+  // size_t valid_pts = std::count(trajectory.point_valid.begin(), trajectory.point_valid.end(), 1);
+  // Eigen::MatrixXd pos_pts(valid_pts, 3);
+
+  std::array<const mavros_msgs::PositionTarget *, trajectory.point_valid.size()> pts_arr = {
+      &trajectory.point_1, &trajectory.point_2, &trajectory.point_3, &trajectory.point_4, &trajectory.point_5};
+
+  points3d_t ctrl_pts;
+  for (size_t i = 0; i < pts_arr.size(); ++i) {
+    if (not trajectory.point_valid.at(i)) continue;
+    auto &_pt = pts_arr.at(i)->position;
+    ctrl_pts.push_back({_pt.x, _pt.y, _pt.z});
+  }
+
+  if (ctrl_pts.size() < 3) return;
+
+  Eigen::MatrixXd pos_pts(ctrl_pts.size(), 3);
+
+  for (size_t i = 0; i < ctrl_pts.size(); ++i) {
+    pos_pts(i, 0) = ctrl_pts.at(i).x();
+    pos_pts(i, 1) = ctrl_pts.at(i).y();
+    pos_pts(i, 2) = ctrl_pts.at(i).z();
+  }
+
+  auto &at = agents_data.trajs.at(agent_id - 1);
+  // double dt = (ctrl_pts.at(1) - ctrl_pts.at(0)).norm();
+  double dt = 0.8;
+  at.setUniformBspline(pos_pts, planner_manager_->pp_.bspline_degree_, dt);
+  at.start_time_ = trajectory.header.stamp.toSec();
+  agents_data.receive_flags.at(agent_id - 1) = true;
+
+  if (exec_state_ == FSM_EXEC_STATE::EXEC_TRAJ) {
+    if (not planner_manager_->checkAgentCollision(agent_id)) {
+      ROS_WARN("%sUnsafe fligth paths for %i and %i", _label, agents_data.drone_id, agent_id);
       changeFSMExecState(FSM_EXEC_STATE::REPLAN_TRAJ, "CHECKING TRAJ");
     }
   }
@@ -342,7 +426,7 @@ bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
   bspline.traj_id = local_traj_data.traj_id_;
   bspline.start_time = local_traj_data.start_time_;
   bspline.knot_span = local_traj_data.position_traj_.getKnotSpan();
-  
+
   auto &_traj = local_traj_data.position_traj_;
 
   auto &ctr_pts = _traj.getControlPoint();
@@ -351,7 +435,7 @@ bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
     _pt.x = ctr_pts(i, 0);
     _pt.y = ctr_pts(i, 1);
     _pt.z = ctr_pts(i, 2);
-    bspline.pos_pts.emplace_back(std::move(_pt));
+    bspline.pos_pts.push_back(std::move(_pt));
   }
 
   auto &knots = _traj.getKnot();
@@ -365,15 +449,84 @@ bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
   bspline.yaw_dt = local_traj_data.yaw_traj_.getKnotSpan();
 
   bspline_pub_.publish(bspline);
-  planner_msgs::AgentTraj at;
-  at.agent_id = planner_manager_->agents_data.drone_id;
-  at.traj = bspline;
 
-  _agent_traj_pub.publish(at);
+  publish_trajectory(bspline, 1);
 
   if (_enable_viz) visualization();
 
   return true;
+}
+
+void SmartReplanFsm::publish_trajectory(const planner_msgs::Bspline &bspline, uint8_t method) {
+
+  if (method == 0) {
+    mavros_msgs::Trajectory traj;
+    traj.header.frame_id = "map";
+    traj.header.seq += 1;
+    traj.header.stamp = ros::Time::now();
+    traj.type = mavros_msgs::Trajectory::MAV_TRAJECTORY_REPRESENTATION_BEZIER;
+    traj.point_valid.fill(0);
+    traj.command.fill(UINT16_MAX);
+    traj.time_horizon.fill(NAN);
+
+    auto &ros_ctrl_pts = bspline.pos_pts;
+
+    // игнорим первую точку. К моменту анализа траектории бпла там уже не будет
+    auto first_pt = ros_ctrl_pts.cbegin() + 1;
+    int pts_count = static_cast<int>(std::distance(first_pt, ros_ctrl_pts.cend()));
+    pts_count = std::min(5, pts_count);
+
+    std::array<mavros_msgs::PositionTarget *, 5U> target_point = {&traj.point_1, &traj.point_2, &traj.point_3, &traj.point_4,
+                                                                  &traj.point_5};
+    for (uint i = 0; i < pts_count; ++i) {
+      target_point.at(i)->position = ros_ctrl_pts.at(i);
+      traj.point_valid.at(i) = 1;
+    }
+
+    _agent_traj_pub0.publish(traj);
+  } else if (method == 1) {
+
+    const uint8_t NUM_PT = 9U;
+
+    struct trag_t {
+      float x[NUM_PT];
+      float y[NUM_PT];
+      float z[NUM_PT];
+      float dt;
+      uint8_t valid_pt;
+    } bspline_struct;
+
+    bspline_struct.dt = static_cast<float>(bspline.knot_span);
+    bspline_struct.valid_pt = 0;
+
+    for (size_t i = 0; i < NUM_PT; ++i) {
+      bspline_struct.x[i] = NAN;
+      bspline_struct.y[i] = NAN;
+      bspline_struct.z[i] = NAN;
+    }
+
+    for (size_t i = 1, j = 0; i < bspline.pos_pts.size(); ++i, ++j) {
+      auto &_pt = bspline.pos_pts.at(i); //< игнорирую первую точку
+      bspline_struct.x[j] = static_cast<float>(_pt.x);
+      bspline_struct.y[j] = static_cast<float>(_pt.y);
+      bspline_struct.z[j] = static_cast<float>(_pt.z);
+      bspline_struct.valid_pt += 1;
+    }
+
+    ROS_DEBUG_STREAM("SIZE: " << sizeof(bspline_struct));
+
+    if (bspline_struct.valid_pt == 0) return;
+
+    uint8_t *data_arr = reinterpret_cast<uint8_t *>(&bspline_struct);
+
+    mavros_msgs::Tunnel msg;
+    msg.target_system = 0;
+    msg.target_component = 0;
+    msg.payload_type = 300;
+    msg.payload_length = sizeof(bspline_struct);
+    std::copy_n(data_arr, sizeof(bspline_struct), msg.payload.begin());
+    _agent_traj_pub1.publish(msg);
+  }
 }
 
 void SmartReplanFsm::frontierCallback(const ros::TimerEvent &e) {

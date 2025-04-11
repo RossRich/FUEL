@@ -25,13 +25,17 @@ find_package(catkin REQUIRED COMPONENTS
   active_perception
   cv_bridge
   planner_msgs
+  hg_msgs
+  tf2
+  tf2_ros
 )
 
 
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES plan_manage
- CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils planner_msgs)
+ CATKIN_DEPENDS plan_env path_searching bspline bspline_opt active_perception traj_utils planner_msgs hg_msgs
+)
 
 include_directories(
   include

@@ -4,7 +4,9 @@
 #include <Eigen/Eigen>
 #include <algorithm>
 #include <bspline_opt/bspline_optimizer.h>
+#include <hg_msgs/IsotopeTrajectory.h>
 #include <iostream>
+#include <mavros_msgs/Tunnel.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <path_searching/kinodynamic_astar.h>
@@ -19,6 +21,10 @@
 #include <traj_utils/planning_visualization.h>
 #include <vector>
 #include <visualization_msgs/Marker.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2_eigen/tf2_eigen.h>
 
 namespace fast_planner {
 class SmartReplanFsm {
@@ -45,7 +51,7 @@ private:
   /* planning data */
   bool have_target_, have_odom_, collide_;
   bool _is_stop_req;
-  
+
   FSM_EXEC_STATE exec_state_;
 
   Eigen::Vector3d odom_pos_, odom_vel_; // odometry state
@@ -63,13 +69,18 @@ private:
   ros::Subscriber waypoint_sub_;
   ros::Subscriber path_sub_;
   ros::Subscriber odom_sub_;
-  ros::Subscriber _agent_traj_sub;
+  ros::Subscriber _agent_traj_sub0;
+  ros::Subscriber _agent_traj_sub1;
 
   ros::Publisher _wait_goal_pub;
   ros::Publisher new_pub_;
   ros::Publisher bspline_pub_;
   ros::Publisher replan_pub_;
-  ros::Publisher _agent_traj_pub;
+  ros::Publisher _agent_traj_pub0;
+  ros::Publisher _agent_traj_pub1;
+
+  tf2_ros::Buffer _tf_buffer;
+  tf2_ros::TransformListener _tf_listener;
 
   /* helper functions */
   bool callPathPlanner(PLAN_STEP step);
@@ -82,14 +93,16 @@ private:
   void pathCallback(const nav_msgs::PathConstPtr &msg);
   void waypointCallback(const geometry_msgs::PoseStampedPtr &);
   void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
-  void agent_traj_callback(const planner_msgs::AgentTrajConstPtr &agent_traj);
+  void agent_traj_callback0(const hg_msgs::IsotopeTrajectoryConstPtr &agent_traj);
+  void agent_traj_callback1(const mavros_msgs::TunnelConstPtr &tunnel_msg);
   bool stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res);
+  void publish_trajectory(const planner_msgs::Bspline &, uint8_t);
 
   /* visualize new trajectories */
   void visualization();
 
 public:
-  SmartReplanFsm() {}
+  SmartReplanFsm(): _tf_listener(_tf_buffer) {}
   ~SmartReplanFsm() {}
   void init(ros::NodeHandle &nh);
 
