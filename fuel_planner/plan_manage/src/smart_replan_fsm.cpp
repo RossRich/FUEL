@@ -72,25 +72,21 @@ void SmartReplanFsm::agent_traj_callback1(const mavros_msgs::TunnelConstPtr &tun
   std::copy(tunnel_msg->payload.data(), tunnel_msg->payload.data() + tunnel_msg->payload_length, data_arr);
 
   points3d_t ctrl_pts;
-  for (size_t i = 0; i < bspline_struct.valid_pt; ++i) {
+  for (size_t i = 0; i < bspline_struct.valid_pt; ++i)
     ctrl_pts.push_back({bspline_struct.x[i], bspline_struct.y[i], bspline_struct.z[i]});
-  }
 
   if (ctrl_pts.size() < 3) return;
 
-  std::string tgt_frame("map_");
-  tgt_frame += std::to_string(agent_id);
-
-  std::string src_frame("map");
+  std::string tgt_frame("earth");
+  std::string src_frame("map_");
+  src_frame += std::to_string(agent_id);
 
   try {
- 
-    // auto tf_stamped = _tf_buffer.lookupTransform(tgt_frame, src_frame, ros::Time(0));
-    geometry_msgs::PointStamped tmp_v = tf2::toMsg(tf2::Stamped<point3d_t>(ctrl_pts.at(0), ros::Time::now(), src_frame));
-    auto new_vector = _tf_buffer.transform(tmp_v, tgt_frame);
-    ctrl_pts.at(0).x() = new_vector.point.x;
-    ctrl_pts.at(0).y() = new_vector.point.y;
-    ctrl_pts.at(0).z() = new_vector.point.z;
+    for (auto &_ctrl_pt : ctrl_pts) {
+    geometry_msgs::PointStamped tmp_pt = tf2::toMsg(tf2::Stamped<point3d_t>(_ctrl_pt, ros::Time::now(), src_frame));
+      auto new_vector = _tf_buffer.transform(tmp_pt, tgt_frame);
+      tf2::fromMsg(new_vector.point, _ctrl_pt);
+    }
   } catch (const std::exception &e) {
     ROS_WARN_STREAM(_label << e.what());
     return;
