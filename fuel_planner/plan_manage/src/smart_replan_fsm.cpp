@@ -6,6 +6,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   have_odom_ = false;
   collide_ = false;
   _is_stop_req = false;
+  _odom_time_stamp = ros::Time(0);
 
   exec_state_ = FSM_EXEC_STATE::INIT;
 
@@ -27,7 +28,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
 
   /* callback */
   exec_timer_ = nh.createTimer(ros::Duration(0.01), &SmartReplanFsm::execFSMCallback, this);
-  safety_timer_ = nh.createTimer(ros::Duration(0.05), &SmartReplanFsm::checkCollisionCallback, this);
+  safety_timer_ = nh.createTimer(ros::Duration(0.03), &SmartReplanFsm::check_safety, this);
   // frontier_timer_ = nh.createTimer(ros::Duration(0.1), &SmartReplanFsm::frontierCallback, this);
 
   _stop_srv = nh.advertiseService("/planning/stop", &SmartReplanFsm::stop_srv, this);
@@ -83,7 +84,7 @@ void SmartReplanFsm::agent_traj_callback1(const mavros_msgs::TunnelConstPtr &tun
 
   try {
     for (auto &_ctrl_pt : ctrl_pts) {
-    geometry_msgs::PointStamped tmp_pt = tf2::toMsg(tf2::Stamped<point3d_t>(_ctrl_pt, ros::Time::now(), src_frame));
+      geometry_msgs::PointStamped tmp_pt = tf2::toMsg(tf2::Stamped<point3d_t>(_ctrl_pt, ros::Time::now(), src_frame));
       auto new_vector = _tf_buffer.transform(tmp_pt, tgt_frame);
       tf2::fromMsg(new_vector.point, _ctrl_pt);
     }
@@ -113,7 +114,7 @@ void SmartReplanFsm::agent_traj_callback1(const mavros_msgs::TunnelConstPtr &tun
     }
   }
 
-  visualization_->drawBspline(at, 0.05, {0.5, 0.5, 0.5, 0.8});
+  // visualization_->drawBspline(at, 0.05, {0.5, 0.5, 0.5, 0.8});
 }
 
 void SmartReplanFsm::agent_traj_callback0(const hg_msgs::IsotopeTrajectoryConstPtr &agent_msg) {
@@ -158,7 +159,7 @@ void SmartReplanFsm::agent_traj_callback0(const hg_msgs::IsotopeTrajectoryConstP
     }
   }
 
-  visualization_->drawBspline(at, 0.05, {0.5, 0.5, 0.5, 0.8});
+  // visualization_->drawBspline(at, 0.05, {0.5, 0.5, 0.5, 0.8});
 }
 
 void SmartReplanFsm::waypointCallback(const geometry_msgs::PoseStampedPtr &pose) {
@@ -225,7 +226,7 @@ void SmartReplanFsm::pathCallback(const nav_msgs::PathConstPtr &msg) {
   target_point_(1) = msg_pt.position.y;
   target_point_(2) = msg_pt.position.z;
   global_wp.push_back(target_point_);
-  visualization_->drawGoal(target_point_, 0.3, Eigen::Vector4d(1, 0, 0, 1.0));
+  // visualization_->drawGoal(target_point_, 0.3, Eigen::Vector4d(1, 0, 0, 1.0));
 
   planner_manager_->setGlobalWaypoints(global_wp);
   have_target_ = true;
@@ -246,7 +247,7 @@ void SmartReplanFsm::odometryCallback(const nav_msgs::OdometryConstPtr &msg) {
   odom_orient_.y() = msg->pose.pose.orientation.y;
   odom_orient_.z() = msg->pose.pose.orientation.z;
 
-  have_odom_ = true;
+  _odom_time_stamp = msg->header.stamp + ros::Duration(2.0);
 }
 
 void SmartReplanFsm::changeFSMExecState(FSM_EXEC_STATE new_state, const char *pos_call) {
@@ -260,6 +261,8 @@ void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
   static ros::Time wait_pub_timer = ros::Time::now() + ros::Duration(1);
   static uint _replan_num = 0;
   static uint failed_num = 0;
+
+  have_odom_ = ros::Time::now() < _odom_time_stamp;
 
   switch (exec_state_) {
   case INIT: {
@@ -367,26 +370,30 @@ void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
     new_pub_.publish(std_msgs::Empty());
     _is_stop_req = false;
     have_target_ = false;
-    changeFSMExecState(FSM_EXEC_STATE::WAIT_TARGET, "FSM");
-
+    auto new_state = have_odom_ ? FSM_EXEC_STATE::WAIT_TARGET : FSM_EXEC_STATE::INIT;
+    changeFSMExecState(new_state, "FSM");
     break;
   }
   }
 }
 
-void SmartReplanFsm::checkCollisionCallback(const ros::TimerEvent &e) {
-  /* ---------- check trajectory ---------- */
+void SmartReplanFsm::check_safety(const ros::TimerEvent &e) {
   if (exec_state_ == EXEC_TRAJ) {
-    double dist;
-    collide_ = not planner_manager_->checkTrajCollision(dist);
-    if (collide_) {
-      ROS_WARN("%sCurrent traj %0.2f m to collision", _label, dist);
-      if (dist < _emergency_stop_dist) {
-        changeFSMExecState(STOP, "SAFETY");
-        ROS_ERROR_STREAM(_label << "Stop. Collision detected");
-      } else {
-        changeFSMExecState(FSM_EXEC_STATE::REPLAN_TRAJ, "SAFETY");
+    if (have_odom_) {
+      double dist;
+      collide_ = not planner_manager_->checkTrajCollision(dist);
+      if (collide_) {
+        ROS_WARN("%sCurrent traj %0.2f m to collision", _label, dist);
+        if (dist < _emergency_stop_dist) {
+          changeFSMExecState(STOP, "SAFETY");
+          ROS_ERROR_STREAM(_label << "Stop. Collision detected");
+        } else {
+          changeFSMExecState(FSM_EXEC_STATE::REPLAN_TRAJ, "SAFETY");
+        }
       }
+    } else {
+      changeFSMExecState(FSM_EXEC_STATE::STOP, "SAFETY");
+      ROS_ERROR_STREAM(_label << "Stop. Odometry lost");
     }
   }
 }
@@ -528,7 +535,7 @@ void SmartReplanFsm::publish_trajectory(const planner_msgs::Bspline &bspline, ui
 void SmartReplanFsm::frontierCallback(const ros::TimerEvent &e) {
   if (!have_odom_) return;
   planner_manager_->searchFrontier(odom_pos_);
-  visualization_->drawFrontier(planner_manager_->plan_data_.frontiers_);
+  // visualization_->drawFrontier(planner_manager_->plan_data_.frontiers_);
 }
 
 void SmartReplanFsm::visualization() {

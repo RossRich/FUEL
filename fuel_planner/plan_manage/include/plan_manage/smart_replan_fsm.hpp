@@ -52,6 +52,8 @@ private:
   bool have_target_, have_odom_, collide_;
   bool _is_stop_req;
 
+  ros::Time _odom_time_stamp;
+
   FSM_EXEC_STATE exec_state_;
 
   Eigen::Vector3d odom_pos_, odom_vel_; // odometry state
@@ -88,7 +90,7 @@ private:
 
   /* ROS functions */
   void execFSMCallback(const ros::TimerEvent &e);
-  void checkCollisionCallback(const ros::TimerEvent &e);
+  void check_safety(const ros::TimerEvent &e);
   void frontierCallback(const ros::TimerEvent &e);
   void pathCallback(const nav_msgs::PathConstPtr &msg);
   void waypointCallback(const geometry_msgs::PoseStampedPtr &);
