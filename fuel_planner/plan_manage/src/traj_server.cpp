@@ -19,6 +19,7 @@ using fast_planner::PolynomialTraj;
 
 ros::Publisher cmd_vis_pub, pos_cmd_pub, traj_pub;
 nav_msgs::Odometry odom;
+ros::Time odom_timer = ros::Time(0);
 planner_msgs::PositionCommand cmd;
 
 // Info of generated traj
@@ -28,6 +29,7 @@ ros::Time start_time_;
 int traj_id_;
 int pub_traj_id_;
 bool is_visualization_on = false;
+bool is_odom_stable = false;
 
 shared_ptr<PerceptionUtils> percep_utils_;
 
@@ -183,23 +185,24 @@ void newCallback(std_msgs::Empty msg) {
 void odomCallbck(const nav_msgs::Odometry &msg) {
   // if (msg.child_frame_id == "X" || msg.child_frame_id == "O") return;
   odom = msg;
+  odom_timer = ros::Time::now() + ros::Duration(2.0);
   // traj_real_.push_back(Eigen::Vector3d(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z));
 
   // if (traj_real_.size() > 1000) {
-    // traj_real_.erase(traj_real_.begin(), traj_real_.begin() + 5000);
-    // traj_real_.insert(traj_real_.begin(), traj_real_.begin() + 500, traj_real_.end());
-    // traj_real_.erase(traj_real_.begin() + 500, traj_real_.end());
+  // traj_real_.erase(traj_real_.begin(), traj_real_.begin() + 5000);
+  // traj_real_.insert(traj_real_.begin(), traj_real_.begin() + 500, traj_real_.end());
+  // traj_real_.erase(traj_real_.begin() + 500, traj_real_.end());
   // }
 }
 
 // void pgTVioCallback(geometry_msgs::Pose msg) {
-  // World to odom
-  // Eigen::Quaterniond q = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
-  // R_loop = q.toRotationMatrix();
-  // T_loop << msg.position.x, msg.position.y, msg.position.z;
+// World to odom
+// Eigen::Quaterniond q = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
+// R_loop = q.toRotationMatrix();
+// T_loop << msg.position.x, msg.position.y, msg.position.z;
 
-  // cout << "R_loop: " << R_loop << endl;
-  // cout << "T_loop: " << T_loop << endl;
+// cout << "R_loop: " << R_loop << endl;
+// cout << "T_loop: " << T_loop << endl;
 // }
 
 void visCallback(const ros::TimerEvent &e) {
@@ -212,8 +215,14 @@ void visCallback(const ros::TimerEvent &e) {
 
 void bsplineCallback(const planner_msgs::BsplineConstPtr &msg) {
   // Received traj should have ascending traj_id
+
+  if (not is_odom_stable) {
+    ROS_ERROR("[traj_srv] Odometry not stable");
+    return;
+  }
+
   if (msg->traj_id <= traj_id_) {
-    ROS_ERROR("out of order bspline.");
+    ROS_ERROR("[traj_srv] Out of order bspline.");
     return;
   }
 
@@ -257,10 +266,11 @@ void bsplineCallback(const planner_msgs::BsplineConstPtr &msg) {
 }
 
 void cmdCallback(const ros::TimerEvent &e) {
-  // No publishing before receive traj data
-  if (!receive_traj_) return;
-
   ros::Time time_now = ros::Time::now();
+  is_odom_stable = time_now < odom_timer;
+
+  if (not is_odom_stable or not receive_traj_) return;
+
   double t_cur = (time_now - start_time_).toSec();
   Eigen::Vector3d pos, vel, acc, jer;
   double yaw, yawdot;
