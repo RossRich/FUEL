@@ -4,6 +4,7 @@
 #include <Eigen/Eigen>
 #include <algorithm>
 #include <bspline_opt/bspline_optimizer.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <hg_msgs/IsotopeTrajectory.h>
 #include <iostream>
 #include <mavros_msgs/Tunnel.h>
@@ -18,13 +19,12 @@
 #include <ros/ros.h>
 #include <std_msgs/Empty.h>
 #include <std_srvs/Trigger.h>
+#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/transform_listener.h>
 #include <traj_utils/planning_visualization.h>
 #include <vector>
 #include <visualization_msgs/Marker.h>
-#include <tf2_ros/transform_listener.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <tf2_eigen/tf2_eigen.h>
 
 namespace fast_planner {
 class SmartReplanFsm {
@@ -53,6 +53,8 @@ private:
   bool _is_stop_req;
 
   ros::Time _odom_time_stamp;
+  ros::Time _wait_pub_timer;
+  ros::Time _heartbeat_pub_timer;
 
   FSM_EXEC_STATE exec_state_;
 
@@ -74,6 +76,7 @@ private:
   ros::Subscriber _agent_traj_sub0;
   ros::Subscriber _agent_traj_sub1;
 
+  ros::Publisher _heartbeat_pub;
   ros::Publisher _wait_goal_pub;
   ros::Publisher new_pub_;
   ros::Publisher bspline_pub_;

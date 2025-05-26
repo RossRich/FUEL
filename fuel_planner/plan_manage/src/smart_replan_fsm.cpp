@@ -7,6 +7,8 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   collide_ = false;
   _is_stop_req = false;
   _odom_time_stamp = ros::Time(0);
+  _wait_pub_timer = ros::Time(0);
+  _heartbeat_pub_timer = ros::Time(0);
 
   exec_state_ = FSM_EXEC_STATE::INIT;
 
@@ -39,6 +41,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   path_sub_ = nh.subscribe("/planning/path", 1, &SmartReplanFsm::pathCallback, this);
   odom_sub_ = nh.subscribe("/planning/odom_world", 1, &SmartReplanFsm::odometryCallback, this);
 
+  _heartbeat_pub = nh.advertise<std_msgs::Empty>("/planning/heartbeat", 5);
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 20);
   new_pub_ = nh.advertise<std_msgs::Empty>("/planning/new", 20);
   bspline_pub_ = nh.advertise<planner_msgs::Bspline>("/planning/bspline", 20);
@@ -258,11 +261,16 @@ void SmartReplanFsm::changeFSMExecState(FSM_EXEC_STATE new_state, const char *po
 }
 
 void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
-  static ros::Time wait_pub_timer = ros::Time::now() + ros::Duration(1);
   static uint _replan_num = 0;
   static uint failed_num = 0;
+  const auto time_now = ros::Time::now();
 
-  have_odom_ = ros::Time::now() < _odom_time_stamp;
+  have_odom_ = time_now < _odom_time_stamp;
+
+  if (time_now > _heartbeat_pub_timer) {
+    _heartbeat_pub.publish(std_msgs::Empty());
+    _heartbeat_pub_timer = time_now + ros::Duration(3);
+  }
 
   switch (exec_state_) {
   case INIT: {
@@ -278,9 +286,9 @@ void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
     if (have_target_) {
       changeFSMExecState(GEN_NEW_TRAJ, "FSM");
     } else {
-      if (ros::Time::now() > wait_pub_timer) {
+      if (time_now > _wait_pub_timer) {
         _wait_goal_pub.publish(std_msgs::Empty());
-        wait_pub_timer = ros::Time::now() + ros::Duration(5);
+        _wait_pub_timer = ros::Time::now() + ros::Duration(5);
       }
     }
     break;
@@ -317,7 +325,7 @@ void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
   case EXEC_TRAJ: {
     auto &pm = *planner_manager_;
     auto &global_data = pm.global_data_;
-    auto time_now = ros::Time::now();
+    // const auto exc_time_now = ros::Time::now();
 
     if (_is_stop_req) {
       // запрос на остановку движения
@@ -342,7 +350,7 @@ void SmartReplanFsm::execFSMCallback(const ros::TimerEvent &e) {
   case REPLAN_TRAJ: {
     replan_pub_.publish(std_msgs::Empty());
     LocalTrajData &local_traj = planner_manager_->local_data_;
-    ros::Time time_now = ros::Time::now();
+    // ros::Time time_now = ros::Time::now();
     double t_cur = (time_now - local_traj.start_time_).toSec();
 
     start_pt_ = odom_pos_;
@@ -405,7 +413,7 @@ bool SmartReplanFsm::callPathPlanner(PLAN_STEP step) {
   if (step == PLAN_STEP::FULL)
     if (not pm.planGlobalTraj3(start_pt_, odom_orient_)) return false;
 
-  auto time_now = ros::Time::now();
+  const auto time_now = ros::Time::now();
   double local_traj_start = (time_now - glob_data.global_start_time_).toSec(); //< начало локальной траектории на глобальной
 
   if (not pm.planLocaTraj(local_traj_start, time_now)) return false;

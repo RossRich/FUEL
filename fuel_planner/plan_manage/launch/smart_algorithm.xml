@@ -36,6 +36,7 @@
     <remap from="/planning/stop"       to="planning/stop"/>
     <remap from="/planning/path"       to="planning/path"/>
     <remap from="/planning/waypoint"   to="planning/waypoint"/>
+    <remap from="/planning/heartbeat"  to="planning/heartbeat"/>
     <remap from="/planning/agent_traj_pub0" to="broadcaster/trajectory" />
     <remap from="/planning/agent_traj_pub1" to="broadcaster/tunnel" />
     <remap from="/planning/agent_traj_sub0" to="scanner/trajectory" />
