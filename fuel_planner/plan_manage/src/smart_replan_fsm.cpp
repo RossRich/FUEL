@@ -25,7 +25,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   auto &ad = planner_manager_->agents_data;
   ad.init(0, 5);
   ros::NodeHandle glob;
-  glob.param("isotope_id", ad.drone_id, 0);
+  glob.param("sys_id", ad.drone_id, 0);
   ROS_ASSERT_MSG(ad.drone_id > 0, "Invalid agent id. %i <= 0", ad.drone_id);
 
   /* callback */
