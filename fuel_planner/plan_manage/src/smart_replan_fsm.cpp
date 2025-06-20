@@ -39,7 +39,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   _agent_traj_sub1 = nh.subscribe("/planning/agent_traj_sub1", 50, &SmartReplanFsm::agent_traj_callback1, this);
   waypoint_sub_ = nh.subscribe("/planning/waypoint", 1, &SmartReplanFsm::waypointCallback, this);
   path_sub_ = nh.subscribe("/planning/path", 1, &SmartReplanFsm::pathCallback, this);
-  odom_sub_ = nh.subscribe("/planning/odom_world", 1, &SmartReplanFsm::odometryCallback, this);
+  odom_sub_ = nh.subscribe("/planning/odom_world", 30, &SmartReplanFsm::odometryCallback, this);
 
   _heartbeat_pub = nh.advertise<std_msgs::Empty>("/planning/heartbeat", 5);
   replan_pub_ = nh.advertise<std_msgs::Empty>("/planning/replan", 20);
