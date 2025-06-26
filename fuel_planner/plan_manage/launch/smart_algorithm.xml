@@ -157,7 +157,7 @@
     <param name="search/max_tau" value="1.0" type="double"/>
     <param name="search/init_max_tau" value="1.0" type="double"/>
     <param name="search/max_vel" value="$(arg max_vel)" type="double"/>
-    <param name="search/vel_margin" value="0.25" type="double"/>
+    <param name="search/vel_margin" value="0.0" type="double"/>
     <param name="search/max_acc" value="$(arg max_acc)" type="double"/>
     <param name="search/w_time" value="10.0" type="double"/>
     <param name="search/horizon" value="5.0" type="double"/>

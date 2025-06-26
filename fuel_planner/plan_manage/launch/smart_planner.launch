@@ -19,9 +19,9 @@
   <arg name="fy" default="282.229248046875"/>
 
   <arg name="max_vel" default="1.0"/>
-  <arg name="max_acc" default="2.0"/>
+  <arg name="max_acc" default="1.0"/>
 
-  <arg name="waypoints_dist" default="3.0"/>
+  <arg name="grid_size" default="3.0"/>
   
   <!-- main algorithm params -->
   <include file="$(find plan_manage)/launch/smart_algorithm.xml">
@@ -73,7 +73,7 @@
     <param name="waypoint_type" value="dense"/>
     <param name="size_x"        value="$(arg map_size_x)" type="double"/>
     <param name="size_y"        value="$(arg map_size_y)" type="double"/>
-    <param name="point_dist"    value="$(arg waypoints_dist)" type="double"/>
+    <param name="point_dist"    value="$(arg grid_size)" type="double"/>
     <param name="offset"        value="1.0" type="double"/>
   </node>
 </launch>
