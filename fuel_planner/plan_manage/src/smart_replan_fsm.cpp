@@ -34,6 +34,7 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   // frontier_timer_ = nh.createTimer(ros::Duration(0.1), &SmartReplanFsm::frontierCallback, this);
 
   _stop_srv = nh.advertiseService("/planning/stop", &SmartReplanFsm::stop_srv, this);
+  _reset_map_srv = nh.advertiseService("reset_map", &SmartReplanFsm::reset_map_srv, this);
 
   _agent_traj_sub0 = nh.subscribe("/planning/agent_traj_sub0", 50, &SmartReplanFsm::agent_traj_callback0, this);
   _agent_traj_sub1 = nh.subscribe("/planning/agent_traj_sub1", 50, &SmartReplanFsm::agent_traj_callback1, this);
@@ -48,6 +49,13 @@ void SmartReplanFsm::init(ros::NodeHandle &nh) {
   _wait_goal_pub = nh.advertise<std_msgs::Empty>("/planning/wait", 5);
   _agent_traj_pub0 = nh.advertise<mavros_msgs::Trajectory>("/planning/agent_traj_pub0", 20);
   _agent_traj_pub1 = nh.advertise<mavros_msgs::Tunnel>("/planning/agent_traj_pub1", 20);
+}
+
+bool SmartReplanFsm::reset_map_srv(std_srvs::SetBoolRequest &req, std_srvs::SetBoolResponse &res) {
+  if (req.data) planner_manager_->edt_environment_->reset_map();
+  res.message = "Map reset successfully";
+  res.success = 1;
+  return true;
 }
 
 bool SmartReplanFsm::stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res) {

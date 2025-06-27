@@ -109,6 +109,7 @@ void SDFMap::resetBuffer(const Eigen::Vector3d& min_pos, const Eigen::Vector3d& 
     for (int y = min_id(1); y <= max_id(1); ++y)
       for (int z = min_id(2); z <= max_id(2); ++z) {
         md_->occupancy_buffer_inflate_[toAddress(x, y, z)] = 0;
+        md_->occupancy_buffer_[toAddress(x, y, z)] = 0;
         md_->distance_buffer_[toAddress(x, y, z)] = mp_->default_dist_;
       }
 }

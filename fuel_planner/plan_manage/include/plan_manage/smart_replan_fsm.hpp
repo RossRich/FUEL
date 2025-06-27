@@ -18,6 +18,7 @@
 #include <planner_msgs/Bspline.h>
 #include <ros/ros.h>
 #include <std_msgs/Empty.h>
+#include <std_srvs/SetBool.h>
 #include <std_srvs/Trigger.h>
 #include <tf2_eigen/tf2_eigen.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -69,6 +70,7 @@ private:
   ros::Timer exec_timer_, safety_timer_, vis_timer_, frontier_timer_;
 
   ros::ServiceServer _stop_srv;
+  ros::ServiceServer _reset_map_srv;
 
   ros::Subscriber waypoint_sub_;
   ros::Subscriber path_sub_;
@@ -101,6 +103,7 @@ private:
   void agent_traj_callback0(const hg_msgs::IsotopeTrajectoryConstPtr &agent_traj);
   void agent_traj_callback1(const mavros_msgs::TunnelConstPtr &tunnel_msg);
   bool stop_srv(std_srvs::TriggerRequest &req, std_srvs::TriggerResponse &res);
+  bool reset_map_srv(std_srvs::SetBoolRequest &req, std_srvs::SetBoolResponse &res);
   void publish_trajectory(const planner_msgs::Bspline &, uint8_t);
 
   /* visualize new trajectories */

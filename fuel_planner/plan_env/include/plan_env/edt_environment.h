@@ -39,8 +39,9 @@ public:
   void setMap(shared_ptr<SDFMap>& map);
   void setObjPrediction(ObjPrediction prediction);
   void setObjScale(ObjScale scale);
-  void evaluateEDTWithGrad(const Eigen::Vector3d& pos, double time, double& dist, Eigen::Vector3d& grad);
-  double evaluateCoarseEDT(Eigen::Vector3d& pos, double time);
+  void evaluateEDTWithGrad(const Eigen::Vector3d &pos, double time, double &dist, Eigen::Vector3d &grad);
+  double evaluateCoarseEDT(Eigen::Vector3d &pos, double time);
+  void reset_map();
 
   // deprecated
   void getSurroundDistance(Eigen::Vector3d pts[2][2][2], double dists[2][2][2]);

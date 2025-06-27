@@ -4,7 +4,10 @@
 namespace fast_planner {
 /* ============================== edt_environment ==============================
  */
-void EDTEnvironment::init() {
+void EDTEnvironment::init() {}
+
+void EDTEnvironment::reset_map() {
+  if (sdf_map_) sdf_map_->resetBuffer();
 }
 
 void EDTEnvironment::setMap(shared_ptr<SDFMap>& map) {
