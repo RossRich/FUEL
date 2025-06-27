@@ -78,9 +78,9 @@
     <param name="map_ros/fy" value="$(arg fy)"/>
     <param name="map_ros/depth_filter_maxdist"   value="$(eval 0.5 + arg('depth_dist'))"/>
     <param name="map_ros/depth_filter_mindist"   value="0.2"/>
-    <param name="map_ros/depth_filter_margin"    value="2"/>
-    <param name="map_ros/k_depth_scaling_factor" value="1000.0"/>
-    <param name="map_ros/skip_pixel" value="1"/>
+    <param name="map_ros/depth_filter_margin"    value="2"/> <!-- Отступ от краев кадра глубини -->
+    <param name="map_ros/k_depth_scaling_factor" value="1000.0"/> <!-- Первод дистанции в метры для карты глубины -->
+    <param name="map_ros/skip_pixel" value="1"/> <!-- Обрабатывать только каждый skip_pixel элемент кадра глубины  -->
     <param name="map_ros/esdf_slice_height" value="1.0"/>
     <param name="map_ros/visualization_truncate_height"   value="$(eval arg('z_height') - 0.3)"/>
     <param name="map_ros/visualization_truncate_low"   value="0.0"/>
